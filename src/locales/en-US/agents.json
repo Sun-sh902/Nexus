@@ -176,6 +176,7 @@
   "capabilityName.mcp.read": "Read MCP servers",
   "capabilityName.mcp.toggle": "Enable / disable MCP",
   "capabilityName.mcp.addRemote": "Add remote MCP",
+  "capabilityName.mcp.addReviewed": "Add reviewed local MCP",
   "capabilityName.skills.read": "Read Skills",
   "capabilityName.skills.write": "Install Skills",
   "capabilityName.lifecycle.install": "Install",
@@ -186,5 +187,11 @@
   "support.supported": "Supported",
   "support.unverified": "Implemented, unverified here",
   "support.unsupported": "Not available",
-  "directIntentLive": "A direct model assignment chosen in Nexus."
+  "directIntentLive": "A direct model assignment chosen in Nexus.",
+  "operationsHistoryTitle": "Recent Agent operations",
+  "operationsHistoryKicker": "Journaled · local only",
+  "noOperationsHistory": "No recorded operations yet",
+  "noOperationsHistoryHelp": "Previewed and confirmed changes for this Agent appear here.",
+  "healthHistoryTitle": "Recent readiness checks",
+  "healthHistoryNoIssues": "No findings"
 }

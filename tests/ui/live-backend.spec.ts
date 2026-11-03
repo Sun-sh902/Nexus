@@ -8,29 +8,49 @@ import { resources } from '../../src/app/resources';
 // only thing simulated; no fixture data from src/data/fixtures.ts may appear.
 const fixture = (name: string) => JSON.parse(readFileSync(`tests/fixtures/live/${name}.json`, 'utf8'));
 
-async function startLive(page: Page, locale: 'en-US', route: string, options: { deny?: boolean; failScan?: boolean } = {}) {
+async function startLive(page: Page, locale: 'en-US', route: string, options: { deny?: boolean; failScan?: boolean; failModels?: boolean } = {}) {
   const data = { overview: fixture('overview'), after: fixture('overview-after'), models: fixture('models'), plan: fixture('plan'), result: fixture('result') };
+  for (const overview of [data.overview, data.after]) for (const agent of overview.agents) agent.health.validUntil = new Date(Date.now() + 600_000).toISOString();
   await page.addInitScript(({ locale, data, options }) => {
     localStorage.setItem('nexus.preferences.v1', JSON.stringify({ version: 1, theme: 'light' }));
     const calls: { cmd: string; args: unknown }[] = [];
     let confirmed = false;
+    let pruned = false;
     (window as unknown as { __calls: typeof calls }).__calls = calls;
+    (window as unknown as { __failModels?: boolean }).__failModels = Boolean(options.failModels);
     (window as unknown as { isTauri: boolean }).isTauri = true;
     (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
       transformCallback: () => 0,
       invoke: async (cmd: string, args: Record<string, unknown>) => {
         calls.push({ cmd, args });
         switch (cmd) {
-          case 'app_metadata': return { contractVersion: 1, version: '0.1.0', preferredLocale: locale };
+          case 'app_metadata': return { contractVersion: 1, version: '0.2.1', preferredLocale: locale };
           case 'apply_app_preferences': return { contractVersion: 1, requestId: (args.request as { requestId: string }).requestId, result: 'applied' };
           case 'nexus_set_locale': return null;
           case 'nexus_overview':
-            if (options.failScan) throw { code: 'store.open_failed', params: [], retryable: true };
+            if (options.failScan || (window as unknown as { __failAfter?: boolean }).__failAfter) throw { code: 'store.open_failed', params: [], retryable: true };
             return confirmed ? data.after : data.overview;
-          case 'nexus_models': return data.models;
-          case 'nexus_agent_history': return { backups: [], operations: [], health: [] };
+          case 'nexus_models':
+            if ((window as unknown as { __failModels?: boolean }).__failModels) throw { code: 'store.open_failed', params: [], retryable: true };
+            return data.models;
+          case 'nexus_agent_history':
+            return {
+              backups: [{ id: 'bkp_1', operationId: 'op_1', agentId: 'claude', targetId: 'claude.settings', targetDisplay: '~/.claude/settings.json', sha256: 'abcdef0123456789', size: 128, createdAt: '2026-11-03T07:00:00Z' }],
+              operations: [{ id: 'op_1', action: 'applyModel', agentId: 'claude', status: 'succeeded', startedAt: '2026-11-03T07:00:00Z', finishedAt: '2026-11-03T07:00:01Z', errorCode: null, summary: {}, steps: ['backup', 'write', 'verify'] }],
+              health: [{ readiness: 'attention', ruleSet: 'health.v1', issueCodes: ['assignmentDrift'], evaluatedAt: '2026-11-03T07:05:00Z' }],
+            };
           case 'nexus_prepare_action': return data.plan;
           case 'nexus_discard_plan': return null;
+          case 'nexus_delete_profile': return null;
+          case 'nexus_storage_status':
+            return pruned
+              ? { dataDir: '~/Library/Application Support/dev.nexus.app', dbBytes: 49_152, backupCount: 1, backupBytes: 512, operationCount: 0, unresolvedCount: 0, healthRowCount: 4 }
+              : { dataDir: '~/Library/Application Support/dev.nexus.app', dbBytes: 65_536, backupCount: 3, backupBytes: 2048, operationCount: 5, unresolvedCount: 0, healthRowCount: 16 };
+          case 'nexus_prune_history':
+            pruned = true;
+            return { prunedOperations: 5, prunedHealthRows: 12, prunedBackups: 2 };
+          case 'nexus_diagnostic_preview':
+            return { filename: 'nexus-diagnostics.json', json: JSON.stringify({ schemaVersion: 1, appVersion: '0.2.1', system: { dataDir: '~/Library/Application Support/dev.nexus.app' } }, null, 2) };
           case 'nexus_confirm_plan':
             if (options.deny) throw { code: 'confirmation.denied', params: [], retryable: false };
             confirmed = true;
@@ -60,6 +80,32 @@ for (const locale of ['en-US'] as const) {
     expect(results.violations.map(v => v.id)).toEqual([]);
   });
 
+  test(`${locale}: expired evidence no longer appears ready`, async ({ page }) => {
+    await page.clock.install();
+    await startLive(page, locale, 'home');
+    await expect(page.locator('.agent-ledger')).toBeVisible();
+    await page.clock.fastForward(601_000);
+    await expect(page.locator('main')).toContainText(m.common.scanFailed);
+  });
+
+  test(`${locale}: a failed rescan is visible after a successful scan`, async ({ page }) => {
+    await startLive(page, locale, 'home');
+    await expect(page.locator('.agent-ledger')).toBeVisible();
+    await page.evaluate(() => { (window as unknown as { __failAfter: boolean }).__failAfter = true; });
+    await page.getByRole('button', { name: m.common.rescan }).click();
+    await expect(page.locator('main')).toContainText(m.errors['store.open_failed']);
+  });
+
+  test(`${locale}: model loading failure is visible and can be retried`, async ({ page }) => {
+    await startLive(page, locale, 'models', { failModels: true });
+    await expect(page.locator('main')).toContainText(m.errors['store.open_failed']);
+    const retry = page.locator('.notice').getByRole('button', { name: m.common.retryScan });
+    await expect(retry).toBeVisible();
+    await page.evaluate(() => { (window as unknown as { __failModels: boolean }).__failModels = false; });
+    await retry.click();
+    await expect(page.locator('.chain-sheet')).toBeVisible();
+  });
+
   test(`${locale}: finding → plan → native confirmation → verified result`, async ({ page }) => {
     await startLive(page, locale, 'agents/codex');
     await page.getByRole('tab', { name: m.agents.diagnostics }).click();
@@ -69,7 +115,7 @@ for (const locale of ['en-US'] as const) {
     const plan = page.locator('.plan-sheet');
     await expect(plan).toContainText(m.actions['kind.setMcpEnabled']);
     await expect(plan).toContainText('mcp_servers.files.enabled');
-    await expect(plan.locator('.plan-diff')).toContainText('enabled = false');
+    await expect(plan.locator('.plan-diff')).toHaveCount(0);
     await expect(plan).toContainText(m.actions['backup.encrypted']);
     await plan.getByRole('button', { name: m.actions.confirm }).click();
     const result = page.locator('.plan-sheet').filter({ hasText: m.actions['status.succeeded'] });
@@ -105,8 +151,45 @@ for (const locale of ['en-US'] as const) {
     await page.getByRole('tab', { name: m.agents.configuration }).click();
     await expect(page.locator('main')).toContainText(m.agents['installSource.nativeInstaller']);
     await expect(page.locator('main')).toContainText(m.capability['capability.nativeUninstallManual']);
+    await expect(page.locator('main')).toContainText(m.agents.operationsHistoryTitle);
+    await expect(page.locator('main')).toContainText(m.actions['kind.applyModel']);
+    await expect(page.locator('main')).toContainText(m.agents.healthHistoryTitle);
     await page.goto('/#/agents/opencode');
     await page.getByRole('tab', { name: m.agents.modelTab }).click();
     await expect(page.locator('main')).toContainText(m.capability['capability.opencodeAmbiguousConfig']);
+  });
+
+  test(`${locale}: reviewed local MCP recipes prepare typed plans and respect Agent boundaries`, async ({ page }) => {
+    await startLive(page, locale, 'agents/codex');
+    await page.getByRole('tab', { name: m.agents.extensions }).click();
+    await page.locator('#mcp-reviewed-recipe').selectOption('mcp.filesystem');
+    await page.locator('#mcp-reviewed-name').fill('project_fs');
+    await page.locator('#mcp-reviewed-dir').fill('~/Projects/demo');
+    await page.locator('[aria-labelledby="add-reviewed-mcp-title"]').getByRole('button', { name: m.extensions.liveAddPreview }).click();
+    const prepCalls = await page.evaluate(() => (window as unknown as { __calls: { cmd: string; args: { request: Record<string, unknown> } }[] }).__calls.filter(c => c.cmd === 'nexus_prepare_action'));
+    expect(prepCalls[0].args.request).toEqual({
+      kind: 'addReviewedMcp',
+      agentId: 'codex',
+      name: 'project_fs',
+      recipeId: 'mcp.filesystem',
+      directory: '~/Projects/demo',
+    });
+    await page.goto('/#/agents/claude');
+    await page.getByRole('tab', { name: m.agents.extensions }).click();
+    await expect(page.locator('[aria-labelledby="add-reviewed-mcp-title"]')).toContainText(m.capability['capability.claudeMcpAgentOwned']);
+  });
+
+  test(`${locale}: live Settings prunes local history and previews redacted diagnostics before export`, async ({ page }) => {
+    await startLive(page, locale, 'settings');
+    await expect(page.locator('main')).toContainText(m.settings.privacy);
+    await expect(page.locator('main')).toContainText('~/Library/Application Support/dev.nexus.app');
+    await page.getByRole('button', { name: m.settings.pruneButton }).click();
+    await expect(page.locator('main')).toContainText('Pruned 5 operations');
+    await page.getByRole('button', { name: m.settings.previewDiagnostics }).click();
+    await expect(page.locator('pre.plan-diff')).toContainText('"schemaVersion": 1');
+    await page.getByRole('button', { name: m.settings.downloadDiagnostics }).click();
+    await expect(page.locator('main')).toContainText('Saved nexus-diagnostics.json.');
+    const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+    expect(results.violations.map(v => v.id)).toEqual([]);
   });
 }

@@ -58,11 +58,15 @@ pub fn run() {
             ipc::nexus_create_model,
             ipc::nexus_delete_model,
             ipc::nexus_save_profile,
+            ipc::nexus_delete_profile,
             ipc::nexus_set_assignment,
             ipc::nexus_prepare_action,
             ipc::nexus_confirm_plan,
             ipc::nexus_discard_plan,
-            ipc::nexus_launch_agent
+            ipc::nexus_launch_agent,
+            ipc::nexus_storage_status,
+            ipc::nexus_prune_history,
+            ipc::nexus_diagnostic_preview
         ])
         .setup(|app| {
             // Nexus-owned data lives in the per-app data directory, never inside Agent folders.

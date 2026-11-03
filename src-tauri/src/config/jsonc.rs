@@ -461,7 +461,12 @@ impl Document {
             .root
             .get(parents)
             .ok_or_else(|| NexusError::new("config.entry_missing"))?;
-        let Node::Object { members, .. } = parent else {
+        let Node::Object {
+            start: obj_start,
+            end: obj_end,
+            members,
+        } = parent
+        else {
             return Err(NexusError::new("config.unexpected_shape"));
         };
         let index = members
@@ -469,46 +474,109 @@ impl Document {
             .rposition(|m| m.key == *last)
             .ok_or_else(|| NexusError::new("config.entry_missing"))?;
         let member = &members[index];
+        let member_start = member.start;
         let member_end = member.value.span().1;
-        let (from, to) = if index + 1 < members.len() {
-            // Remove "key": value, plus the separating comma and whitespace up to the next member.
-            let line_start = self.text[..member.start]
-                .rfind('\n')
-                .map(|i| i + 1)
-                .unwrap_or(0);
-            let from = if self.text[line_start..member.start].trim().is_empty() {
-                line_start
-            } else {
-                member.start
-            };
-            let next = members[index + 1].start;
-            let next_line_start = self.text[..next].rfind('\n').map(|i| i + 1).unwrap_or(0);
-            let to = if next_line_start > member_end
-                && self.text[next_line_start..next].trim().is_empty()
-                && from == line_start
-            {
-                next_line_start
-            } else {
-                next
-            };
-            (from, to)
-        } else if index > 0 {
-            // Last member: remove from the end of the previous member's value.
-            (members[index - 1].value.span().1, member_end)
+        let close_brace = obj_end - 1;
+        let b = self.text.as_bytes();
+        let after_limit = if index + 1 < members.len() {
+            members[index + 1].start
         } else {
-            (member.start, member_end)
+            close_brace
         };
-        let mut out = format!("{}{}", &self.text[..from], &self.text[to..]);
-        // A lone member followed by a JSONC trailing comma: drop the dangling comma.
-        if index == 0 && members.len() == 1 {
-            let rest = out[from..].trim_start();
-            if rest.starts_with(',') {
-                let comma = from + (out[from..].len() - rest.len());
-                out.replace_range(comma..comma + 1, "");
+        let is_hspace = |slice: &[u8]| slice.iter().all(|c| *c == b' ' || *c == b'\t');
+        let line_start = self.text[..member_start]
+            .rfind('\n')
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let clean_prefix = line_start > *obj_start && is_hspace(&b[line_start..member_start]);
+        let newline_after = |pos: usize| -> Option<usize> {
+            if pos < close_brace && b[pos] == b'\n' {
+                Some(pos + 1)
+            } else if pos + 1 < close_brace && b[pos] == b'\r' && b[pos + 1] == b'\n' {
+                Some(pos + 2)
+            } else {
+                None
+            }
+        };
+
+        let mut spans: Vec<(usize, usize)> = Vec::new();
+        if let Some(comma) = find_top_comma(b, member_end, after_limit) {
+            if is_hspace(&b[member_end..comma]) {
+                let mut eol = comma + 1;
+                while eol < close_brace && (b[eol] == b' ' || b[eol] == b'\t') {
+                    eol += 1;
+                }
+                if clean_prefix {
+                    if let Some(line_end) = newline_after(eol) {
+                        spans.push((line_start, line_end));
+                    } else {
+                        spans.push((member_start, eol));
+                    }
+                } else {
+                    spans.push((member_start, eol));
+                }
+            } else {
+                spans.push((member_start, member_end));
+                spans.push((comma, comma + 1));
+            }
+        } else {
+            let mut eol = member_end;
+            while eol < close_brace && (b[eol] == b' ' || b[eol] == b'\t') {
+                eol += 1;
+            }
+            let (m_from, m_to) = match (clean_prefix, newline_after(eol)) {
+                (true, Some(line_end)) => (line_start, line_end),
+                _ => (member_start, member_end),
+            };
+            if index > 0 {
+                let prev_end = members[index - 1].value.span().1;
+                if let Some(prev_comma) = find_top_comma(b, prev_end, member_start) {
+                    if m_from == member_start && is_hspace(&b[prev_comma + 1..member_start]) {
+                        spans.push((prev_comma, m_to));
+                    } else {
+                        spans.push((prev_comma, prev_comma + 1));
+                        spans.push((m_from, m_to));
+                    }
+                } else {
+                    spans.push((m_from, m_to));
+                }
+            } else {
+                spans.push((m_from, m_to));
             }
         }
+
+        let mut out = String::with_capacity(self.text.len());
+        let mut cursor = 0;
+        for (from, to) in spans {
+            out.push_str(&self.text[cursor..from]);
+            cursor = to;
+        }
+        out.push_str(&self.text[cursor..]);
         Ok(out)
     }
+}
+
+fn find_top_comma(b: &[u8], mut i: usize, end: usize) -> Option<usize> {
+    while i < end {
+        match b[i] {
+            b',' => return Some(i),
+            b'/' if i + 1 < end && b[i + 1] == b'/' => {
+                i += 2;
+                while i < end && b[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'/' if i + 1 < end && b[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < end && !(b[i] == b'*' && b[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(end);
+            }
+            _ => i += 1,
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -625,6 +693,41 @@ mod tests {
         assert_eq!(
             doc.remove(&["missing"]).unwrap_err().code,
             "config.entry_missing"
+        );
+    }
+
+    #[test]
+    fn removing_members_preserves_adjacent_and_inline_comments() {
+        let commented = "{\n  // before first\n  \"a\": 1, /* inline on a */\n  // before middle\n  \"b\": 2,\n  // before last\n  \"c\": 3\n}\n";
+        let doc = Document::parse(commented, Dialect::Jsonc).unwrap();
+
+        let no_a = doc.remove(&["a"]).unwrap();
+        assert_eq!(round(&no_a, Dialect::Jsonc), json!({"b": 2, "c": 3}));
+        assert!(no_a.contains("// before first"));
+        assert!(no_a.contains("/* inline on a */"));
+        assert!(no_a.contains("// before middle"));
+        assert!(no_a.contains("// before last"));
+
+        let no_b = doc.remove(&["b"]).unwrap();
+        assert_eq!(round(&no_b, Dialect::Jsonc), json!({"a": 1, "c": 3}));
+        assert!(no_b.contains("/* inline on a */"));
+        assert!(no_b.contains("// before middle"));
+        assert!(no_b.contains("// before last"));
+
+        let no_c = doc.remove(&["c"]).unwrap();
+        assert_eq!(round(&no_c, Dialect::Jsonc), json!({"a": 1, "b": 2}));
+        assert!(no_c.contains("/* inline on a */"));
+        assert!(no_c.contains("// before middle"));
+        assert!(no_c.contains("// before last"));
+
+        let single_line = Document::parse("{\"a\": 1, \"b\": 2}", Dialect::Json).unwrap();
+        assert_eq!(
+            round(&single_line.remove(&["a"]).unwrap(), Dialect::Json),
+            json!({"b": 2})
+        );
+        assert_eq!(
+            round(&single_line.remove(&["b"]).unwrap(), Dialect::Json),
+            json!({"a": 1})
         );
     }
 

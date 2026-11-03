@@ -451,13 +451,7 @@ fn scenario_8_confirmation_is_required_and_single_use() {
             agent_id: AgentId::Claude,
         })
         .unwrap();
-    assert!(plan
-        .config
-        .as_ref()
-        .unwrap()
-        .diff
-        .iter()
-        .any(|d| d.kind == '+' && d.text.contains("sonnet")));
+    assert!(plan.config.as_ref().unwrap().diff.is_empty());
     assert_eq!(
         app.confirm(&plan.id, &plan.digest).unwrap_err().code,
         "confirmation.denied"
@@ -954,6 +948,323 @@ fn opencode_ambiguous_config_blocks_mutation_with_explanation() {
         .code,
         "capability.unsupported"
     );
+}
+
+#[test]
+fn security_plan_expiry_after_native_dialog_stalls_refuses_mutation() {
+    struct StallUntilExpired;
+    impl crate::app::Confirmer for StallUntilExpired {
+        fn confirm(&self, plan: &crate::actions::PlanView, _locale: &str) -> bool {
+            while crate::core::Instant::now() < plan.expires_at {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            true
+        }
+    }
+
+    let home = Home::new();
+    home.claude("2.1.311");
+    home.write(".claude/settings.json", "{\n  \"theme\": \"dark\"\n}\n");
+    let mut app = crate::app::test_support::app_with_confirmer(
+        home.dir.path(),
+        Box::new(StallUntilExpired),
+        false,
+    );
+    app.ctx.set_env(
+        "PATH",
+        &format!(
+            "{}:{}:{}",
+            home.p("bin").display(),
+            home.p(".npm-global/bin").display(),
+            home.p(".local/bin").display()
+        ),
+    );
+    app.set_assignment(
+        AgentId::Claude,
+        AssignmentMode::Direct,
+        Some("builtin.anthropic.opus"),
+        None,
+    )
+    .unwrap();
+    let plan = app
+        .prepare(ActionRequest::ApplyModel {
+            agent_id: AgentId::Claude,
+        })
+        .unwrap();
+    let digest = app.force_plan_expiry(&plan.id, crate::core::Instant::now().plus_secs(1));
+    let err = app.confirm(&plan.id, &digest).unwrap_err();
+    assert_eq!(err.code, "plan.expired");
+    assert_eq!(
+        home.read(".claude/settings.json"),
+        "{\n  \"theme\": \"dark\"\n}\n"
+    );
+}
+
+#[test]
+fn reviewed_local_mcp_lifecycle_hydration_and_path_confinement() {
+    let home = Home::new();
+    home.node("26.10.0");
+    home.npm_package("@openai/codex", "codex", "0.164.0", "bin/codex.js");
+    home.gemini("0.64.0");
+    home.write(".codex/config.toml", "model = \"gpt-6.1-terra\"\n");
+    home.write(
+        ".gemini/settings.json",
+        "{\n  // user comment preserved across MCP edits\n  \"security\": {\"auth\": {\"selectedType\": \"oauth-personal\"}}\n}\n",
+    );
+    home.write(
+        ".config/opencode/opencode.jsonc",
+        "{\n  // opencode comment\n  \"model\": \"anthropic/claude-sonnet-5-5\"\n}\n",
+    );
+    fs::create_dir_all(home.p("projects/demo")).unwrap();
+    fs::create_dir_all(home.p(".ssh")).unwrap();
+
+    // Missing npx blocks reviewed MCP preparation cleanly.
+    let app = home.app(true);
+    assert_eq!(
+        app.prepare(ActionRequest::AddReviewedMcp {
+            agent_id: AgentId::Codex,
+            name: "memory".into(),
+            recipe_id: "mcp.memory".into(),
+            directory: None,
+        })
+        .unwrap_err()
+        .code,
+        "extension.runtime_missing"
+    );
+
+    // Provide npx on PATH and test path confinement + Claude unsupported boundary.
+    home.exe("bin/npx", "#!/bin/sh\nexit 0\n");
+    assert_eq!(
+        app.prepare(ActionRequest::AddReviewedMcp {
+            agent_id: AgentId::Claude,
+            name: "memory".into(),
+            recipe_id: "mcp.memory".into(),
+            directory: None,
+        })
+        .unwrap_err()
+        .code,
+        "capability.unsupported"
+    );
+    for bad_dir in [
+        home.dir.path().to_string_lossy().to_string(),
+        home.p(".ssh").to_string_lossy().to_string(),
+        home.p("nexus-data").to_string_lossy().to_string(),
+        "/etc".to_string(),
+    ] {
+        assert!(
+            app.prepare(ActionRequest::AddReviewedMcp {
+                agent_id: AgentId::Gemini,
+                name: "fs".into(),
+                recipe_id: "mcp.filesystem".into(),
+                directory: Some(bad_dir.clone()),
+            })
+            .is_err(),
+            "accepted unsafe directory {bad_dir}"
+        );
+    }
+
+    // Add reviewed filesystem MCP to Gemini & memory MCP to Codex and OpenCode.
+    let workspace = home.p("projects/demo").to_string_lossy().to_string();
+    confirm(
+        &app,
+        ActionRequest::AddReviewedMcp {
+            agent_id: AgentId::Gemini,
+            name: "workspace_fs".into(),
+            recipe_id: "mcp.filesystem".into(),
+            directory: Some(workspace),
+        },
+    )
+    .unwrap();
+    confirm(
+        &app,
+        ActionRequest::AddReviewedMcp {
+            agent_id: AgentId::Codex,
+            name: "local_mem".into(),
+            recipe_id: "mcp.memory".into(),
+            directory: None,
+        },
+    )
+    .unwrap();
+    confirm(
+        &app,
+        ActionRequest::AddReviewedMcp {
+            agent_id: AgentId::Opencode,
+            name: "local_mem".into(),
+            recipe_id: "mcp.memory".into(),
+            directory: None,
+        },
+    )
+    .unwrap();
+
+    // Overview hydrates `nexus_managed = true` on managed MCP entries.
+    let o = app.overview(true).unwrap();
+    let gm = &report(&o, AgentId::Gemini).snapshot.extensions.mcp;
+    assert!(gm.iter().any(|s| s.name == "workspace_fs"
+        && s.transport == McpTransport::Stdio
+        && s.nexus_managed));
+    let cm = &report(&o, AgentId::Codex).snapshot.extensions.mcp;
+    assert!(cm
+        .iter()
+        .any(|s| s.name == "local_mem" && s.transport == McpTransport::Stdio && s.nexus_managed));
+
+    // Removing the managed server preserves user comments in JSON/JSONC.
+    confirm(
+        &app,
+        ActionRequest::RemoveManagedMcp {
+            agent_id: AgentId::Gemini,
+            name: "workspace_fs".into(),
+        },
+    )
+    .unwrap();
+    confirm(
+        &app,
+        ActionRequest::RemoveManagedMcp {
+            agent_id: AgentId::Opencode,
+            name: "local_mem".into(),
+        },
+    )
+    .unwrap();
+    assert!(home
+        .read(".gemini/settings.json")
+        .contains("// user comment preserved across MCP edits"));
+    assert!(home
+        .read(".config/opencode/opencode.jsonc")
+        .contains("// opencode comment"));
+}
+
+#[test]
+fn model_profile_deletion_guards_active_assignments_and_tracks_revisions() {
+    let home = Home::new();
+    home.claude("2.1.311");
+    home.write(".claude/settings.json", "{\n  \"theme\": \"dark\"\n}\n");
+    let app = home.app(true);
+    let profile = app
+        .save_profile(
+            None,
+            "Coding Fast",
+            "builtin.anthropic.sonnet",
+            Some("medium"),
+        )
+        .unwrap();
+    assert_eq!(profile.revision, 1);
+
+    app.set_assignment(
+        AgentId::Claude,
+        AssignmentMode::Profile,
+        None,
+        Some(&profile.id),
+    )
+    .unwrap();
+    confirm(
+        &app,
+        ActionRequest::ApplyModel {
+            agent_id: AgentId::Claude,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        app.delete_profile(&profile.id).unwrap_err().code,
+        "profile.in_use"
+    );
+
+    // Updating the profile bumps revision and marks the assigned Agent pending reapply.
+    let updated = app
+        .save_profile(
+            Some(&profile.id),
+            "Coding Fast",
+            "builtin.anthropic.opus",
+            Some("high"),
+        )
+        .unwrap();
+    assert_eq!(updated.revision, 2);
+    let view = app.models_view().unwrap();
+    assert!(view.assignments.iter().any(|a| a.pending));
+
+    // Returning the Agent to native clears the reference and allows profile deletion.
+    app.set_assignment(AgentId::Claude, AssignmentMode::Native, None, None)
+        .unwrap();
+    app.delete_profile(&profile.id).unwrap();
+    assert!(app.models_view().unwrap().profiles.is_empty());
+}
+
+#[test]
+fn storage_status_prune_history_and_redacted_diagnostic_preview() {
+    let home = Home::new();
+    home.node("26.10.0");
+    home.gemini("0.64.0");
+    home.claude("2.1.311");
+    home.write(
+        ".claude/settings.json",
+        "{\n  \"theme\": \"dark\",\n  \"apiKeyHelper\": \"echo sk-ant-api03-CANARYSECRET0123456789abcdef\"\n}\n",
+    );
+    let mut app =
+        crate::app::test_support::app_with_confirmer(home.dir.path(), Box::new(Fixed(true)), true);
+    app.ctx.set_env(
+        "PATH",
+        &format!(
+            "{}:{}:{}",
+            home.p("bin").display(),
+            home.p(".npm-global/bin").display(),
+            home.p(".local/bin").display()
+        ),
+    );
+
+    // Create two config backups for the same target so the older backup becomes prunable.
+    app.set_assignment(
+        AgentId::Claude,
+        AssignmentMode::Direct,
+        Some("builtin.anthropic.sonnet"),
+        None,
+    )
+    .unwrap();
+    confirm(
+        &app,
+        ActionRequest::ApplyModel {
+            agent_id: AgentId::Claude,
+        },
+    )
+    .unwrap();
+    app.set_assignment(
+        AgentId::Claude,
+        AssignmentMode::Direct,
+        Some("builtin.anthropic.opus"),
+        None,
+    )
+    .unwrap();
+    confirm(
+        &app,
+        ActionRequest::ApplyModel {
+            agent_id: AgentId::Claude,
+        },
+    )
+    .unwrap();
+    let _ = app.overview(true).unwrap();
+    let _ = app.overview(true).unwrap();
+
+    let status_before = app.storage_status().unwrap();
+    assert!(status_before.db_bytes > 0);
+    assert_eq!(status_before.backup_count, 2);
+    assert!(status_before.operation_count >= 2);
+    assert!(status_before.health_row_count >= 8);
+
+    let pruned = app.prune_history(0).unwrap();
+    assert!(pruned.pruned_operations >= 2);
+    assert_eq!(pruned.pruned_backups, 1);
+    assert!(pruned.pruned_health_rows >= 4);
+
+    let status_after = app.storage_status().unwrap();
+    // Latest backup per target and latest health row per Agent are preserved.
+    assert_eq!(status_after.backup_count, 1);
+    assert_eq!(status_after.health_row_count, 4);
+
+    let diag = app.diagnostic_preview().unwrap();
+    assert_eq!(diag.filename, "nexus-diagnostics.json");
+    assert!(!diag.json.contains("CANARY"));
+    assert!(!diag.json.contains("private@example.com"));
+    assert!(!diag
+        .json
+        .contains(&home.dir.path().to_string_lossy().to_string()));
+    assert!(diag.json.contains("~/nexus-data"));
 }
 
 /// Read-only discovery of the real machine. Opt-in: `cargo test real_machine -- --ignored --nocapture`.

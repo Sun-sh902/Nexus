@@ -31,6 +31,10 @@ pub fn dialog_text(plan: &PlanView, locale: &str) -> (String, String, String, St
     if let Some(cfg) = &plan.config {
         lines.push(format!("{}: {}", t("label.file"), cfg.location));
         for change in cfg.changes.iter().take(4) {
+            if change.before.is_none() && change.after.is_none() {
+                lines.push(format!("  {}", change.key));
+                continue;
+            }
             lines.push(format!(
                 "  {}: {} → {}",
                 change.key,
@@ -55,6 +59,14 @@ pub fn dialog_text(plan: &PlanView, locale: &str) -> (String, String, String, St
     }
     if let Some(v) = param("model") {
         lines.push(format!("{}: {v}", t("label.model")));
+    }
+    if plan.process.is_none() {
+        if let Some(v) = param("package") {
+            lines.push(format!("{}: {v}", t("label.package")));
+        }
+        if let Some(v) = param("directory") {
+            lines.push(format!("{}: {v}", t("label.directory")));
+        }
     }
     lines.push(format!(
         "{}: {}",
@@ -108,6 +120,7 @@ mod tests {
             "applyModel",
             "setMcpEnabled",
             "addRemoteMcp",
+            "addReviewedMcp",
             "removeManagedMcp",
             "restoreBackup",
             "install",

@@ -3,7 +3,10 @@
 //! safe params) which the frontend localizes. Only the bundled `main` window may call them.
 
 use crate::actions::{ActionRequest, OperationResult, PlanView};
-use crate::app::{AgentHistory, App, ModelsView, Overview, ResolvedAssignment};
+use crate::app::{
+    AgentHistory, App, DiagnosticPreview, ModelsView, Overview, PruneResult, ResolvedAssignment,
+    StorageStatus,
+};
 use crate::core::{NexusError, NexusResult};
 use crate::domain::AgentId;
 use crate::models::{
@@ -185,6 +188,17 @@ pub async fn nexus_save_profile(
     .map_err(|_| NexusError::new("app.task_failed"))?
 }
 
+#[tauri::command]
+pub fn nexus_delete_profile(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    profile_id: String,
+) -> NexusResult<()> {
+    main_window(&window)?;
+    bounded(&profile_id, 64)?;
+    state.delete_profile(&profile_id)
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AssignmentInput {
@@ -270,6 +284,40 @@ pub async fn nexus_launch_agent(
         .map_err(|_| NexusError::new("app.task_failed"))?
 }
 
+#[tauri::command]
+pub fn nexus_storage_status(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> NexusResult<StorageStatus> {
+    main_window(&window)?;
+    state.storage_status()
+}
+
+#[tauri::command]
+pub async fn nexus_prune_history(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    retain_days: u32,
+) -> NexusResult<PruneResult> {
+    main_window(&window)?;
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.prune_history(retain_days))
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
+}
+
+#[tauri::command]
+pub async fn nexus_diagnostic_preview(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> NexusResult<DiagnosticPreview> {
+    main_window(&window)?;
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.diagnostic_preview())
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
+}
+
 #[cfg(test)]
 pub const COMMANDS: &[&str] = &[
     "nexus_overview",
@@ -281,11 +329,15 @@ pub const COMMANDS: &[&str] = &[
     "nexus_create_model",
     "nexus_delete_model",
     "nexus_save_profile",
+    "nexus_delete_profile",
     "nexus_set_assignment",
     "nexus_prepare_action",
     "nexus_confirm_plan",
     "nexus_discard_plan",
     "nexus_launch_agent",
+    "nexus_storage_status",
+    "nexus_prune_history",
+    "nexus_diagnostic_preview",
 ];
 
 #[cfg(test)]

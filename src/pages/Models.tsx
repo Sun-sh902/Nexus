@@ -69,11 +69,13 @@ function ProfileForm({ view }: { view: ModelsView }) {
   const [name, setName] = useState('');
   const [modelId, setModelId] = useState('');
   const [editing, setEditing] = useState('');
+  const assignedCount = editing ? view.assignments.filter(a => a.profile?.id === editing).length : 0;
   return <section className="sheet" aria-labelledby="add-profile"><header className="sheet-head"><h3 id="add-profile" className="sheet-title">{t('saveProfile')}</h3><span className="kicker">{t('profileKicker')}</span></header>
     <div className="sheet-body form-stack">
       <Field id="profile-existing" label={t('profileTarget')} help={t('profileTargetHelp')}><Select id="profile-existing" value={editing} onChange={value => { setEditing(value); const p = view.profiles.find(x => x.id === value); if (p) { setName(p.name); setModelId(p.modelId); } }} options={[{ value: '', label: t('newProfile') }, ...view.profiles.map(p => ({ value: p.id, label: `${p.name} · ${t('agents:revisionShort', { revision: p.revision })}` }))]} /></Field>
       <Field id="profile-name" label={t('profileName')}><span className="search-field"><input id="profile-name" value={name} maxLength={80} onChange={event => setName(event.target.value)} /></span></Field>
       <Field id="profile-model" label={t('identity')}><Select id="profile-model" value={modelId} onChange={setModelId} options={[{ value: '', label: t('choose') }, ...view.models.map(m => ({ value: m.id, label: m.identifier }))]} /></Field>
+      {assignedCount > 0 && <Notice>{t('profileImpactNotice', { count: assignedCount })}</Notice>}
       <div className="plan-actions"><button className="button" disabled={!name || !modelId} onClick={() => void run(() => backend.saveProfile({ id: editing || undefined, name, modelId }), editing ? 'profileRevised' : 'profileSaved')}>{t(editing ? 'saveRevision' : 'saveProfile')}</button></div>
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
     </div>
@@ -113,12 +115,13 @@ function SecretForm({ providerId }: { providerId: string }) {
 }
 
 export function Models() {
-  const { t } = useTranslation(['models', 'providers', 'agents', 'common', 'navigation']);
+  const { t } = useTranslation(['models', 'providers', 'agents', 'common', 'navigation', 'errors']);
   const { locale } = usePreferences();
-  const { mode, agents, models, reloadModels, status } = useNexus();
+  const { mode, agents, models, modelsError, reloadModels, status } = useNexus();
+  const [deleteError, setDeleteError] = useState<NexusError | null>(null);
   const [view, setView] = useState<'catalog' | 'profiles' | 'providers'>('catalog');
   useEffect(() => { if (mode === 'live' && !models) void reloadModels(); }, [mode, models, reloadModels]);
-  if (mode === 'live' && (status !== 'ready' || !models)) return <><PageHeading title={t('navigation:models')} description={t('description')} kicker={t('pageKickerLive')} /><DataState /></>;
+  if (mode === 'live' && (status !== 'ready' || !models)) return <><PageHeading title={t('navigation:models')} description={t('description')} kicker={t('pageKickerLive')} />{status === 'ready' && modelsError ? <Notice tone="error"><p>{t(`errors:${modelsError.code}`, modelsError.params)}</p><button className="button" onClick={() => void reloadModels()}>{t('common:retryScan')}</button></Notice> : <DataState />}</>;
   const live = mode === 'live' && models;
   const rows: ChainRow[] = live
     ? agents.map(agent => { const a = agent.report?.assignment; return { id: agent.id, name: agent.name, provider: a?.provider.displayName ?? null, model: a ? a.compatibility.nativeIdentifier ?? a.model.identifier : agent.modelId, profile: a?.profile ? { name: a.profile.name, revision: a.profile.revision } : null, source: t(`agents:${agent.assignment}`) }; })
@@ -126,13 +129,14 @@ export function Models() {
   const counts = live ? { catalog: models.models.length, profiles: models.profiles.length, providers: models.providers.length } : { catalog: demoCatalog.models.length, profiles: demoCatalog.profiles.length, providers: demoCatalog.providers.length };
   const usedBy = (modelId: string): AgentId[] => live ? models.assignments.filter(a => a.model.id === modelId).map(a => a.assignment.agentId) : [];
   return <><PageHeading title={t('navigation:models')} description={t('description')} kicker={t(live ? 'pageKickerLive' : 'pageKicker')} />
+    {deleteError && <Notice tone="error">{t(`errors:${deleteError.code}`, deleteError.params)}</Notice>}
     <Section title={t('mapTitle')} className="map-section" aside={<span className="kicker">{t('mapHelp')}</span>}><AssignmentChain rows={rows} /></Section>
     <Section title={t('catalogTitle')} className="catalog-section">
     <Tabs label={t('tabs')} value={view} onChange={setView} options={(['catalog', 'profiles', 'providers'] as const).map(value => ({ value, label: t(value), count: formatNumber(counts[value], locale) }))}>
       {view === 'catalog' && <><div className="sheet">
         <div className="ledger-head model-grid" aria-hidden="true"><span>{t('identity')}</span><span>{t('provider')}</span><span>{t('metadata')}</span><span>{t('usedBy')}</span></div>
         <ul className="model-list">{live ? models.models.map(model => { const provider = models.providers.find(p => p.id === model.providerId); const compatible = models.matrix.find(([id]) => id === model.id)?.[1].filter(c => c.support !== 'unsupported').map(c => c.agentId) ?? []; return <li key={model.id} className="model-grid">
-          <div><p className="mono model-id">{model.identifier}</p><p className="row-meta">{t(`source.${model.source}`)}{model.sourceDetail && <><span className="note-divider" aria-hidden="true" /><span className="mono">{model.sourceDetail}</span></>}</p>{model.source === 'manual' && <button className="button button-small" onClick={() => void backend.deleteModel(model.id).then(reloadModels).catch(() => undefined)}>{t('remove')}</button>}</div>
+          <div><p className="mono model-id">{model.identifier}</p><p className="row-meta">{t(`source.${model.source}`)}{model.sourceDetail && <><span className="note-divider" aria-hidden="true" /><span className="mono">{model.sourceDetail}</span></>}</p>{model.source === 'manual' && <button className="button button-small" onClick={() => void backend.deleteModel(model.id).then(() => { setDeleteError(null); return reloadModels(); }).catch((error: unknown) => setDeleteError(error instanceof NexusError ? error : new NexusError({ code: 'ipc.unavailable', params: [], retryable: true })))}>{t('remove')}</button>}</div>
           <div><span className="row-label">{t('provider')}</span><span lang="en-US">{provider?.displayName}</span></div>
           <div><span className="row-label">{t('metadata')}</span><span className="unknown-tag">{t('common:unknown')}</span><p className="row-meta">{t('compatibleWith')}</p><AgentLinks ids={compatible} /></div>
           <div><span className="row-label">{t('usedBy')}</span><AgentLinks ids={usedBy(model.id)} /></div>
@@ -145,11 +149,11 @@ export function Models() {
       </div>{live ? <ModelForm view={models} /> : <Notice>{t('assignmentHelp')}</Notice>}</>}
       {view === 'profiles' && <><p className="view-intro">{t(live ? 'profileHelpLive' : 'profileHelp')}</p><div className="sheet">
         <div className="ledger-head profile-grid" aria-hidden="true"><span>{t('agents:profile')}</span><span>{t('profileIdentity')}</span><span>{t('identity')}</span><span>{t('usedBy')}</span></div>
-        <ul className="profile-list">{live ? models.profiles.map(profile => { const model = models.models.find(m => m.id === profile.modelId); return <li key={profile.id} className="profile-grid">
-          <div><p className="row-title">{profile.name}</p><p className="row-meta">{t('agents:revision', { revision: profile.revision })}</p></div>
+        <ul className="profile-list">{live ? models.profiles.map(profile => { const model = models.models.find(m => m.id === profile.modelId); const assigned = models.assignments.filter(a => a.profile?.id === profile.id); const pendingCount = assigned.filter(a => a.pending).length; return <li key={profile.id} className="profile-grid">
+          <div><p className="row-title">{profile.name}</p><p className="row-meta">{t('agents:revision', { revision: profile.revision })}{assigned.length > 0 && <><span className="note-divider" aria-hidden="true" />{pendingCount > 0 ? t('profilePendingCount', { count: pendingCount }) : t('profileCurrentAll')}</>}</p><button className="button button-small" onClick={() => void backend.deleteProfile(profile.id).then(() => { setDeleteError(null); return reloadModels(); }).catch((error: unknown) => setDeleteError(error instanceof NexusError ? error : new NexusError({ code: 'ipc.unavailable', params: [], retryable: true })))}>{t('remove')}</button></div>
           <div><span className="row-label">{t('profileIdentity')}</span><span className="mono">{profile.id}</span></div>
           <div><span className="row-label">{t('identity')}</span><span className="mono">{model?.identifier ?? profile.modelId}</span><p className="row-meta" lang="en-US">{models.providers.find(p => p.id === model?.providerId)?.displayName}</p></div>
-          <div><span className="row-label">{t('usedBy')}</span><AgentLinks ids={models.assignments.filter(a => a.profile?.id === profile.id).map(a => a.assignment.agentId)} /></div>
+          <div><span className="row-label">{t('usedBy')}</span><AgentLinks ids={assigned.map(a => a.assignment.agentId)} /></div>
         </li>; }) : demoCatalog.profiles.map(profile => { const model = findModel(profile.modelId); return <li key={profile.id} className="profile-grid">
           <div><p className="row-title">{t(profile.nameKey)}</p><p className="row-meta">{t('agents:revision', { revision: profile.revision })}</p></div>
           <div><span className="row-label">{t('profileIdentity')}</span><span className="mono">{profile.id}</span></div>
@@ -160,7 +164,7 @@ export function Models() {
       {view === 'providers' && <><p className="view-intro">{t('providers:help')}</p><div className="sheet">
         <div className="ledger-head provider-grid" aria-hidden="true"><span>{t('provider')}</span><span>{t('providers:status')}</span><span>{t('providers:authentication')}</span><span>{t('providers:destination')}</span><span>{t('usedBy')}</span></div>
         <ul className="provider-list">{live ? models.providers.map(provider => <li key={provider.id} className="provider-grid">
-          <div><p className="row-title" lang="en-US">{provider.displayName}</p><p className="row-meta">{t(provider.builtin ? 'providers:builtin' : 'providers:custom')}</p>{!provider.builtin && <button className="button button-small" onClick={() => void backend.deleteProvider(provider.id).then(reloadModels).catch(() => undefined)}>{t('remove')}</button>}</div>
+          <div><p className="row-title" lang="en-US">{provider.displayName}</p><p className="row-meta">{t(provider.builtin ? 'providers:builtin' : 'providers:custom')}</p>{!provider.builtin && <button className="button button-small" onClick={() => void backend.deleteProvider(provider.id).then(() => { setDeleteError(null); return reloadModels(); }).catch((error: unknown) => setDeleteError(error instanceof NexusError ? error : new NexusError({ code: 'ipc.unavailable', params: [], retryable: true })))}>{t('remove')}</button>}</div>
           <div><span className="row-label">{t('providers:status')}</span><span className="connection connection-notConfigured"><span className="connection-dot" aria-hidden="true" />{t('providers:notTested')}</span></div>
           <div><span className="row-label">{t('providers:authentication')}</span>{t(`providers:${provider.authMode}`)}{provider.authMode === 'nexusSecret' && <p className="row-meta">{t(provider.secretPresent === true ? 'providers:secretStored' : provider.secretPresent === false ? 'providers:secretMissing' : 'providers:secretUnknown')}</p>}{provider.authMode === 'environment' && <p className="row-meta mono">{provider.envVar}</p>}{provider.authMode === 'nexusSecret' && <SecretForm providerId={provider.id} />}</div>
           <div><span className="row-label">{t('providers:destination')}</span><span className="mono">{provider.baseUrl ?? '—'}</span></div>

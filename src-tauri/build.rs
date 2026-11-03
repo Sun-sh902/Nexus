@@ -12,11 +12,15 @@ fn main() {
             "nexus_create_model",
             "nexus_delete_model",
             "nexus_save_profile",
+            "nexus_delete_profile",
             "nexus_set_assignment",
             "nexus_prepare_action",
             "nexus_confirm_plan",
             "nexus_discard_plan",
             "nexus_launch_agent",
+            "nexus_storage_status",
+            "nexus_prune_history",
+            "nexus_diagnostic_preview",
         ]),
     ))
     .expect("Tauri build configuration must be valid");

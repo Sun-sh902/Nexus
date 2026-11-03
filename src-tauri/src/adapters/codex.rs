@@ -235,6 +235,7 @@ impl AgentAdapter for Codex {
             cap("mcp.read", level, None),
             cap("mcp.toggle", level, None),
             cap("mcp.addRemote", level, None),
+            cap("mcp.addReviewed", level, None),
             cap("skills.read", level, None),
             cap(
                 "skills.write",
@@ -412,6 +413,46 @@ impl McpTarget for Codex {
                 .ok_or_else(|| NexusError::new("config.unexpected_shape"))?
                 .insert(name, toml_edit::Item::Table(entry));
             Ok((None, url_origin(url)))
+        })
+    }
+    fn plan_add_stdio(
+        &self,
+        ctx: &HostContext,
+        name: &str,
+        command: &str,
+        args: &[String],
+    ) -> NexusResult<ConfigEdit> {
+        validate_mcp_name(name)?;
+        let read = user_config(ctx);
+        plan_toml_edit(&read, &format!("mcp_servers.{name}"), |doc| {
+            if doc.get("mcp_servers").and_then(|t| t.get(name)).is_some() {
+                return Err(NexusError::new("extension.name_conflict"));
+            }
+            if doc
+                .get("mcp_servers")
+                .map(|t| !t.is_table_like())
+                .unwrap_or(false)
+            {
+                return Err(NexusError::new("config.unexpected_shape"));
+            }
+            if doc.get("mcp_servers").is_none() {
+                let mut t = toml_edit::Table::new();
+                t.set_implicit(true);
+                doc.insert("mcp_servers", toml_edit::Item::Table(t));
+            }
+            let mut arr = toml_edit::Array::new();
+            for arg in args {
+                arr.push(arg.as_str());
+            }
+            let mut entry = toml_edit::Table::new();
+            entry.insert("command", toml_edit::value(command));
+            entry.insert("args", toml_edit::Value::Array(arr).into());
+            entry.insert("enabled", toml_edit::value(true));
+            doc["mcp_servers"]
+                .as_table_mut()
+                .ok_or_else(|| NexusError::new("config.unexpected_shape"))?
+                .insert(name, toml_edit::Item::Table(entry));
+            Ok((None, Some(command.to_string())))
         })
     }
     fn plan_remove(&self, ctx: &HostContext, name: &str) -> NexusResult<ConfigEdit> {

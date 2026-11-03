@@ -17,10 +17,14 @@
     "allow-nexus-create-model",
     "allow-nexus-delete-model",
     "allow-nexus-save-profile",
+    "allow-nexus-delete-profile",
     "allow-nexus-set-assignment",
     "allow-nexus-prepare-action",
     "allow-nexus-confirm-plan",
     "allow-nexus-discard-plan",
-    "allow-nexus-launch-agent"
+    "allow-nexus-launch-agent",
+    "allow-nexus-storage-status",
+    "allow-nexus-prune-history",
+    "allow-nexus-diagnostic-preview"
   ]
 }

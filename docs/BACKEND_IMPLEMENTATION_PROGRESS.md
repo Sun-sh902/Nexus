@@ -1,6 +1,6 @@
 # Backend implementation progress (Phases 2–7 core backend)
 
-Status date: 2026-10-27. Branch `claude/nexus-backend-mvp`. This is the resumable record for the
+Status date: 2026-11-03. Version `0.2.1` (`v0.2.1-beta.1`). This is the resumable record for the
 Core Backend Beta Candidate program. It records what exists and what was verified; it does not
 claim anything that was not executed. Product authority remains [PRD](PRD.md); sequencing remains
 [ROADMAP](ROADMAP.md).
@@ -14,7 +14,7 @@ claim anything that was not executed. Product authority remains [PRD](PRD.md); s
 | C — Health engine | Implemented, pure/deterministic, tested |
 | D — Lifecycle | Implemented (npm / Homebrew / Claude self-update recipes), fake-npm tested; **no real install executed** |
 | E — Models/Providers | Implemented (records, compatibility, assignment apply/verify, Keychain secrets) |
-| F — MCP + Skills | MCP read for all four; toggle/add-remote/remove-managed for Codex, Gemini, OpenCode; Skills read-only |
+| F — MCP + Skills | MCP read for all four; toggle/add-remote/add-reviewed-stdio/remove-managed for Codex, Gemini, OpenCode; Skills read-only |
 | G — Diagnostics + Safe Repair | Implemented: findings, restore backup, reapply assignment, recover interrupted install, disable broken MCP |
 | H — Frontend integration | Done: every page reads Rust data in the desktop app; fixtures only in explicit browser demo mode |
 | I — Validation / review | Automated suites green; real desktop app launched with live data; independent review — see §Independent review |
@@ -44,9 +44,9 @@ pointer kept as `.git.broken-worktree-pointer`, fresh `git init`, baseline commi
 | `models.rs` | Provider/Model/Profile/Assignment types, built-in seeds with provenance, compatibility per Agent |
 | `lifecycle.rs` | Recipes, toolchain resolution, version pinning at plan time, fixed argv construction |
 | `actions.rs` | Action Registry: typed `ActionRequest`, immutable digest-bound plans (10 min TTL, single use), native confirmation, journaled execution, independent verification, compensation |
-| `app.rs` | Use cases: overview, reports, models view, Model-domain record mutations |
+| `app.rs` | Use cases: overview, reports, models view, Model-domain record mutations, storage status, history pruning, redacted diagnostic bundle |
 | `native_confirm.rs` | Rust-owned OS confirmation dialog built from the plan (tauri-plugin-dialog), text from `src/locales/en-US/native.json` |
-| `ipc.rs` | 15 typed commands, `deny_unknown_fields`, main-window only; each allowlisted in `capabilities/main.json` |
+| `ipc.rs` | 18 typed domain commands, `deny_unknown_fields`, main-window only; each allowlisted in `capabilities/main.json` |
 
 ## Agent capability matrix (macOS verified on this machine; Windows implemented-but-unverified)
 
@@ -59,7 +59,7 @@ pointer kept as `.git.broken-worktree-pointer`, fresh `git init`, baseline commi
 | Provider routing (no secret handoff) | OpenAI | Anthropic | Google | Anthropic / OpenAI / Google |
 | MCP read | Yes | Yes (`~/.claude.json`, read-only) | Yes | Yes |
 | MCP enable/disable | Yes | Unsupported (Agent-owned state) | Yes (`mcp.excluded`; blocked under `mcp.allowed`) | Yes |
-| Add remote MCP / remove Nexus-added | Yes | Unsupported | Yes (`httpUrl`) | Yes (`type: remote`) |
+| Add remote / reviewed local MCP / remove Nexus-added | Yes | Unsupported | Yes (`httpUrl` / stdio `npx`) | Yes (`type: remote` / `type: local`) |
 | Skills | Read | Read | Read | Read |
 | Skills install/enable | Unsupported (deferred) | Unsupported | Unsupported | Unsupported |
 | Install | npm `@openai/codex`, brew cask `codex` | brew cask `claude-code`, npm | npm, brew `gemini-cli` | npm `opencode-ai` |
@@ -184,9 +184,9 @@ A separate reviewer agent with no implementation context reviewed commits a7481d
 | P3 | URL policy missed IPv6 ULA/link-local, IPv4-mapped, CGNAT | **Fixed**; tests extended |
 | P3 | Brew recovery rewrote npm-style `pkg@v` | **Fixed**: pin rewrite only for npm; brew uses the plan-time resolved version |
 | P3 | Launch skipped trust checks | **Fixed**: launch target and resolved file must pass owner/permission checks. Launch remains a direct user action without a dialog (Security §4) |
-| P3 | JSONC: comment in empty object lost; CRLF files got LF | **Fixed** with tests. **Open**: removing an entry can drop an adjacent comment line; Gemini `mcp.excluded` array is re-rendered |
+| P3 | JSONC: comment in empty object lost; CRLF files got LF | **Fixed** with tests (`0.2.1-beta.1` also fixed comment-preserving member removal in `config::jsonc::Document::remove`). **Open**: Gemini `mcp.excluded` array is re-rendered |
 | P3 | TOML edits lacked unrelated-change verification | **Fixed**: same `verify_only_changed` check as JSON |
-| P3 | Restore "reintroduces executable settings" check is substring-based | **Open** (conservative warning; structural comparison not yet implemented) |
+| P3 | Restore "reintroduces executable settings" check is substring-based | **Fixed (`0.2.1-beta.1`)**: structural `serde_json::Value` comparison (`restore_reintroduces_executable`) with unit tests |
 | P3 | Secret presence check reads the secret (may prompt) | **Open** |
 | P3 | Journal step writes inside the transaction callback are best-effort | **Open** |
 | P3 | Windows `npm.cmd` fails the executable check, so Windows npm recipes are inert | **Open**, consistent with Windows `unverified` status |
@@ -201,9 +201,13 @@ A separate reviewer agent with no implementation context reviewed commits a7481d
 
 Owner decision: the product ships in English only. Removed the zh-CN catalog, the language preference, the toolbar language selector, the Settings language section, the `nexus_set_locale` IPC command and its capability, Chinese native menu/dialog text, `:lang(zh-CN)` CSS and the Source Han Sans/Serif fonts (~18 MB). Chinese-language Phase 1 records were rewritten in English. I18N, PRD, AGENTS, ROADMAP and DESIGN_SYSTEM updated. The i18n structure remains with a single `en-US` catalog. Saved preferences from earlier builds keep their theme; the old language field is ignored.
 
+## Iteration 1 hardening (`0.2.1-beta.1`, 2026-11-03)
+
+- **Security & freshness**: re-checked `plan.expires_at` after native OS confirmation dialog return; stripped raw configuration diff lines (`ConfigEdit.diff`) and `ProviderProfile.secret_ref` from IPC responses; added automatic snapshot-expiry invalidation and visible rescan error banner in `src/app/nexus-data.tsx`.
+- **Config & MCP completeness**: comment-preserving JSON/JSONC member removal (`config::jsonc::Document::remove`); structural `restore_reintroduces_executable` comparison; hydrated `McpServer.nexus_managed` in `App::report`; added compiled `addReviewedMcp` (`mcp.memory`, `mcp.filesystem`) with `$HOME` directory confinement for Codex, Gemini CLI, and OpenCode.
+- **Lifecycle, observability & retention**: `nexus_delete_profile` (`profile.in_use` guard) + Profile revision impact UI in `Models.tsx`; per-Agent operation & readiness history in `AgentDetail.tsx`; Settings local storage metrics (`nexus_storage_status`), bounded retention pruning (`nexus_prune_history`), and preview-required redacted diagnostic export (`nexus_diagnostic_preview`).
+- **Verification (2026-11-03, macOS arm64)**: `cargo test --locked` → **134 passed, 0 failed, 3 ignored** (`real_machine_discovery_smoke` and `export_live_ui_fixture` also executed and green); `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint src tests scripts` → 0 errors; `pnpm test` (Vitest) → 15 passed; `pnpm test:ui` (Playwright + `axe`) → 33 passed; `pnpm build` → pass. Added `.github/workflows/ci.yml` for macOS + Windows.
+
 ## Continuation point
 
-All gates implemented. Next steps toward a public Beta: Windows build + runtime validation (paths,
-`.cmd` shims, Credential Manager, ACL checks for mutation), online Provider validation with the
-Security §7 network controls, Skills install/enable, reviewed stdio MCP recipes, signed release
-and updater, usability sessions.
+All Phases 1–7 Iteration 1 hardening gates are green. Next steps toward a public Beta (Iteration 2 & Iteration 3 in [ROADMAP](ROADMAP.md)): Windows runtime validation (`.cmd` shims, Credential Manager, ACL checks for mutation), user-initiated online Provider validation with Security §7 network controls, local Skills install/remove, signed/notarized release and updater, usability sessions.

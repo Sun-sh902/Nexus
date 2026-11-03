@@ -64,5 +64,10 @@
   "compat.providerNotRoutable": "This Agent does not route to that Provider.",
   "compat.customProviderHandoff": "Custom Providers need a secret handoff Nexus does not perform.",
   "compat.availabilityUnverified": "Availability of this model to your account is not verified.",
-  "compat.noModelTarget": "This Agent has no supported model setting."
+  "compat.noModelTarget": "This Agent has no supported model setting.",
+  "profilePendingCount_one": "{{count}} assigned Agent awaiting apply",
+  "profilePendingCount_other": "{{count}} assigned Agents awaiting apply",
+  "profileCurrentAll": "All assigned Agents match this revision",
+  "profileImpactNotice_one": "Saving a new revision leaves {{count}} assigned Agent on its current setting until you preview and apply the update.",
+  "profileImpactNotice_other": "Saving a new revision leaves {{count}} assigned Agents on their current settings until you preview and apply the update."
 }

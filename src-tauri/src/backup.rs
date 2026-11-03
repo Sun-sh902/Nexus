@@ -111,6 +111,37 @@ impl BackupVault {
             )
             .map_err(|_| NexusError::new("backup.corrupt"))
     }
+
+    /// Removes an encrypted backup file after local retention pruning. Missing files are ignored.
+    pub fn remove(&self, id: &str) -> NexusResult<()> {
+        let path = self.file(id)?;
+        match std::fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(_) => Err(NexusError::new("backup.write_failed")),
+        }
+    }
+
+    pub fn disk_usage(&self) -> (usize, u64) {
+        let Ok(entries) = std::fs::read_dir(&self.dir) else {
+            return (0, 0);
+        };
+        let mut count = 0usize;
+        let mut bytes = 0u64;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("nxb") {
+                continue;
+            }
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_file() {
+                    count += 1;
+                    bytes = bytes.saturating_add(meta.len());
+                }
+            }
+        }
+        (count, bytes)
+    }
 }
 
 #[cfg(test)]

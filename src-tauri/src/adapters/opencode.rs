@@ -317,6 +317,7 @@ impl AgentAdapter for OpenCode {
             cap("mcp.read", level, None),
             cap("mcp.toggle", write, write_reason),
             cap("mcp.addRemote", write, write_reason),
+            cap("mcp.addReviewed", write, write_reason),
             cap("skills.read", level, None),
             cap(
                 "skills.write",
@@ -453,6 +454,30 @@ impl McpTarget for OpenCode {
             &read,
             &["mcp", name],
             serde_json::json!({ "type": "remote", "url": url, "enabled": true }),
+        )
+    }
+    fn plan_add_stdio(
+        &self,
+        ctx: &HostContext,
+        name: &str,
+        command: &str,
+        args: &[String],
+    ) -> NexusResult<ConfigEdit> {
+        validate_mcp_name(name)?;
+        let read = writable_global(ctx)?;
+        if config_value(&read)
+            .and_then(|v| v.get("mcp").and_then(|m| m.get(name)).cloned())
+            .is_some()
+        {
+            return Err(NexusError::new("extension.name_conflict"));
+        }
+        let mut cmd = Vec::with_capacity(1 + args.len());
+        cmd.push(command.to_string());
+        cmd.extend_from_slice(args);
+        plan_json_set(
+            &read,
+            &["mcp", name],
+            serde_json::json!({ "type": "local", "command": cmd, "enabled": true }),
         )
     }
     fn plan_remove(&self, ctx: &HostContext, name: &str) -> NexusResult<ConfigEdit> {

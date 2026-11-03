@@ -44,6 +44,9 @@ export interface Overview { contractVersion: 1; generatedAt: string; system: Sys
 export interface ModelsView { providers: ProviderProfile[]; models: ModelDefinition[]; profiles: ModelProfile[]; assignments: ResolvedAssignment[]; matrix: [string, Compatibility[]][] }
 export interface BackupRecord { id: string; operationId: string; agentId: string | null; targetId: string; targetDisplay: string; sha256: string; size: number; createdAt: string }
 export interface AgentHistory { backups: BackupRecord[]; operations: OperationRecord[]; health: { agentId: string; readiness: Readiness; issueCodes: string[]; evaluatedAt: string }[] }
+export interface StorageStatus { dataDir: string; dbBytes: number; backupCount: number; backupBytes: number; operationCount: number; unresolvedCount: number; healthRowCount: number }
+export interface PruneResult { prunedOperations: number; prunedHealthRows: number; prunedBackups: number }
+export interface DiagnosticPreview { filename: string; json: string }
 export interface ConfigEdit { targetId: string; location: string; format: string; createsFile: boolean; beforeFingerprint: string | null; afterFingerprint: string; changes: { key: string; before: string | null; after: string | null }[]; diff: { kind: '+' | '-'; text: string }[] }
 export interface PlanView {
   id: string; digest: string; kind: string; agentId: AgentId | null; createdAt: string; expiresAt: string; params: Pairs;
@@ -60,6 +63,7 @@ export type ActionRequest =
   | { kind: 'applyModel'; agentId: AgentId }
   | { kind: 'setMcpEnabled'; agentId: AgentId; name: string; enabled: boolean }
   | { kind: 'addRemoteMcp'; agentId: AgentId; name: string; url: string }
+  | { kind: 'addReviewedMcp'; agentId: AgentId; name: string; recipeId: string; directory?: string }
   | { kind: 'removeManagedMcp'; agentId: AgentId; name: string }
   | { kind: 'restoreBackup'; backupId: string }
   | { kind: 'install'; agentId: AgentId; recipeId: string }
@@ -104,9 +108,13 @@ export const backend = {
   createModel: (input: { providerId: string; identifier: string; displayName?: string }) => call<ModelDefinition>('nexus_create_model', { input }),
   deleteModel: (modelId: string) => call<void>('nexus_delete_model', { modelId }),
   saveProfile: (input: { id?: string; name: string; modelId: string; reasoning?: string }) => call<ModelProfile>('nexus_save_profile', { input }),
+  deleteProfile: (profileId: string) => call<void>('nexus_delete_profile', { profileId }),
   setAssignment: (input: { agentId: AgentId; mode: 'native' | 'direct' | 'profile'; modelId?: string; profileId?: string }) => call<ResolvedAssignment | null>('nexus_set_assignment', { input }),
   prepare: (request: ActionRequest) => call<PlanView>('nexus_prepare_action', { request }),
   confirm: (plan: PlanView) => call<OperationResult>('nexus_confirm_plan', { planId: plan.id, digest: plan.digest }),
   discard: (planId: string) => call<void>('nexus_discard_plan', { planId }),
   launch: (agentId: AgentId, installationId: string) => call<string>('nexus_launch_agent', { agentId, installationId }),
+  storageStatus: () => call<StorageStatus>('nexus_storage_status'),
+  pruneHistory: (retainDays: number) => call<PruneResult>('nexus_prune_history', { retainDays }),
+  diagnosticPreview: () => call<DiagnosticPreview>('nexus_diagnostic_preview'),
 };

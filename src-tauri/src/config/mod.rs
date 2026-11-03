@@ -5,7 +5,7 @@
 pub mod jsonc;
 pub mod transaction;
 
-use crate::core::{redact, sha256_hex, NexusError, NexusResult};
+use crate::core::{sha256_hex, NexusError, NexusResult};
 use crate::discovery::ReadConfig;
 use crate::domain::{ConfigFormat, ObsStatus};
 use serde::Serialize;
@@ -57,41 +57,21 @@ impl ConfigEdit {
             creates_file: read.source.status == ObsStatus::NotFound,
             before_fingerprint: read.source.fingerprint.clone(),
             after_fingerprint: sha256_hex(after.as_bytes()),
-            changes,
-            diff: line_diff(before_text.as_deref().unwrap_or(""), &after),
+            // Configuration values can contain arbitrary credentials. Do not send them to
+            // the renderer: token-shaped heuristics cannot reliably identify every secret.
+            changes: changes
+                .into_iter()
+                .map(|c| ChangeLine {
+                    key: c.key,
+                    before: None,
+                    after: None,
+                })
+                .collect(),
+            diff: Vec::new(),
             path: read.source.path.clone(),
             after: after.into_bytes(),
         })
     }
-}
-
-/// Changed lines only (common prefix/suffix trimmed), redacted, capped at 40 lines. Edits are
-/// localized, so this is the exact region that changes; unrelated content is never shown.
-pub fn line_diff(before: &str, after: &str) -> Vec<DiffLine> {
-    let a: Vec<&str> = before.lines().collect();
-    let b: Vec<&str> = after.lines().collect();
-    let prefix = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
-    let suffix = a[prefix..]
-        .iter()
-        .rev()
-        .zip(b[prefix..].iter().rev())
-        .take_while(|(x, y)| x == y)
-        .count();
-    let mut out = Vec::new();
-    for line in &a[prefix..a.len() - suffix] {
-        out.push(DiffLine {
-            kind: '-',
-            text: redact(line),
-        });
-    }
-    for line in &b[prefix..b.len() - suffix] {
-        out.push(DiffLine {
-            kind: '+',
-            text: redact(line),
-        });
-    }
-    out.truncate(40);
-    out
 }
 
 /// Precondition shared by all edits: the source must be readable and parseable. A malformed file
@@ -301,8 +281,9 @@ mod tests {
             ConfigFormat::Json,
         );
         let edit = plan_json_set(&read, &["model"], serde_json::json!("opus")).unwrap();
-        assert_eq!(edit.changes[0].before.as_deref(), Some("sonnet"));
-        assert_eq!(edit.diff.len(), 2);
+        assert!(edit.changes[0].before.is_none());
+        assert!(edit.changes[0].after.is_none());
+        assert!(edit.diff.is_empty());
         assert!(String::from_utf8(edit.after.clone())
             .unwrap()
             .contains("\"theme\": \"dark\""));
@@ -312,6 +293,21 @@ mod tests {
                 .code,
             "config.no_change"
         );
+    }
+
+    #[test]
+    fn removing_mcp_never_serializes_credentials_to_the_plan() {
+        let read = fake_read(
+            Some(
+                r#"{"mcp":{"server":{"url":"https://example.com","headers":{"Authorization":"private-example"}}},"token":"another-private-value"}"#,
+            ),
+            ConfigFormat::Json,
+        );
+        let edit = plan_json_remove(&read, &["mcp", "server"]).unwrap();
+        let preview = serde_json::to_string(&edit).unwrap();
+        assert!(!preview.contains("private-example"));
+        assert!(!preview.contains("another-private-value"));
+        assert!(preview.contains("mcp.server"));
     }
 
     #[test]

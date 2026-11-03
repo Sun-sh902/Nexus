@@ -146,19 +146,23 @@ Every delivery phase follows [SECURITY](SECURITY.md), [ARCHITECTURE](ARCHITECTUR
 | Typography rendering and token adjustments | Design | Phase 1 sign-off | Both OSes/themes, measured contrast, screenshots and accessibility review |
 | Pricing, cloud vendor, sync encryption and marketplace business model | Product + Security | Respective post-MVP phase | User demand, cost/privacy/security evidence; no early dependency |
 
-## Implementation status (2026-10-27)
+## Implementation status (2026-11-03)
 
-Phases 2–7 core backend were authorized together and implemented on `claude/nexus-backend-mvp` as a Core Backend Beta Candidate, validated on macOS arm64 only. The phase definitions above are unchanged. Resolved for this candidate (details and evidence in [BACKEND_IMPLEMENTATION_PROGRESS](BACKEND_IMPLEMENTATION_PROGRESS.md)):
+Phases 2–7 core backend were authorized together and implemented as a Core Backend Beta Candidate (`0.2.0-beta.1` on 2026-10-27, hardened in `0.2.1-beta.1` on 2026-11-03), validated on macOS arm64 with automated macOS + Windows CI. The phase definitions above are unchanged. Resolved for this candidate (details and evidence in [BACKEND_IMPLEMENTATION_PROGRESS](BACKEND_IMPLEMENTATION_PROGRESS.md)):
 
 | Deferred decision | Resolution for the candidate |
 | --- | --- |
-| Native trusted confirmation primitive | Rust-owned OS message dialog (tauri-plugin-dialog, no renderer permission) built from the immutable plan; plans are digest-bound, single-use, 10-minute expiry |
-| Exact config parsers and atomic-write primitives | Span-preserving JSON/JSONC editor and `toml_edit`; sibling temp file + fsync + rename with fingerprint recheck; symlink/hard-link/owner/permission refusal; encrypted exact-byte backups (AES-256-GCM, key in Keychain) |
+| Native trusted confirmation primitive | Rust-owned OS message dialog (tauri-plugin-dialog, no renderer permission) built from the immutable plan; plans are digest-bound, single-use, 10-minute expiry (re-checked after dialog return) |
+| Exact config parsers and atomic-write primitives | Span- and comment-preserving JSON/JSONC editor (insert, replace, and member removal) and `toml_edit`; sibling temp file + fsync + rename with fingerprint recheck; symlink/hard-link/owner/permission refusal; encrypted exact-byte backups (AES-256-GCM, key in Keychain) with structural execution-sensitive restore checks |
 | Beta Provider coverage and safe credential handoff | Agent-owned login routes only (Codex→OpenAI, Claude→Anthropic, Gemini→Google, OpenCode→Anthropic/OpenAI/Google). Nexus-stored secrets are kept in Keychain but not handed to Agents; custom endpoints are not assignable |
-| Probe freshness/timeouts | `--version` probe 5 s / 4 KiB; snapshot validity 600 s; lifecycle process timeout 15 min |
-| Final per-Agent installer matrix | npm and Homebrew recipes plus Claude `claude update`; vendor script installers are never executed |
+| Probe freshness/timeouts and storage budgets | `--version` probe 5 s / 4 KiB; snapshot validity 600 s with automatic UI invalidation; lifecycle process timeout 15 min; Settings local storage inspection, bounded history pruning, and preview-required redacted diagnostic export |
+| Final per-Agent installer & MCP matrix | npm and Homebrew lifecycle recipes plus Claude `claude update` (vendor script installers never executed); remote HTTPS MCP and compiled reviewed stdio MCP recipes (`@modelcontextprotocol/server-memory`, `@modelcontextprotocol/server-filesystem`) for Codex, Gemini CLI, and OpenCode |
 
-Still open before a public Beta: Windows runtime validation and ACL checks, online Provider validation, Skills installation, usability study, signing/updater.
+Sequenced path to complete Phase 7 public Beta (before any separately authorized Phase 8+ work):
+
+1. **Iteration 1 (`0.2.1-beta.1`, delivered 2026-11-03):** Security/freshness hardening, comment-preserving JSONC removal, structural restore checks, `nexus_managed` MCP hydration, reviewed local stdio MCP recipes, Model Profile deletion & revision impact UI, per-Agent operation/health history, Settings storage/retention pruning & redacted diagnostic export, and macOS + Windows CI.
+2. **Iteration 2 (`0.2.2-beta` target — Windows Parity & Opt-in Provider Check):** Windows interactive desktop validation, `.cmd` shim resolution and Windows ACL/reparse checks for safe mutation, Credential Manager end-to-end verification, and user-initiated read-only Provider reachability/credential check obeying Security §7 origin/redirect/timeout controls.
+3. **Iteration 3 (`0.3.0-beta.1` Public Beta Gate):** Local Skill folder installation/removal with traversal/symlink/executable-content disclosure, macOS Developer ID notarization + Windows Authenticode signing, signed Manifest/updater verification drill, and usability/accessibility sign-off across macOS and Windows.
 
 ## Phase 0 review and audit record
 

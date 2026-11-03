@@ -39,6 +39,12 @@ pub enum ActionRequest {
         name: String,
         url: String,
     },
+    AddReviewedMcp {
+        agent_id: AgentId,
+        name: String,
+        recipe_id: String,
+        directory: Option<String>,
+    },
     RemoveManagedMcp {
         agent_id: AgentId,
         name: String,
@@ -202,7 +208,7 @@ fn digest(view: &PlanView, payload: &Payload) -> String {
 }
 
 fn require_capability(snap: &AgentSnapshot, key: &str) -> NexusResult<()> {
-    if snap.capability(key) == Support::Unsupported {
+    if snap.capability(key) != Support::Supported {
         let reason = snap
             .capabilities
             .iter()
@@ -349,6 +355,45 @@ impl App {
                         name,
                         present: true,
                         origin,
+                    },
+                    "verify.mcpPresent",
+                )
+            }
+            ActionRequest::AddReviewedMcp {
+                agent_id,
+                name,
+                recipe_id,
+                directory,
+            } => {
+                validate_text(&name, 128)?;
+                validate_text(&recipe_id, 64)?;
+                let snap = self.fresh_snapshot(agent_id)?;
+                require_capability(&snap, "mcp.addReviewed")?;
+                let (recipe, command, args, display_dir) =
+                    adapters::resolve_reviewed_mcp(&self.ctx, &recipe_id, directory.as_deref())?;
+                let adapter = adapters::adapter(agent_id);
+                let target = adapter
+                    .mcp_target()
+                    .ok_or_else(|| NexusError::new("capability.unsupported"))?;
+                let edit = target.plan_add_stdio(&self.ctx, &name, command, &args)?;
+                let mut view = self.base_view("addReviewedMcp", Some(agent_id));
+                view.params = vec![
+                    ("name".into(), name.clone()),
+                    ("recipe".into(), recipe.id.into()),
+                    ("package".into(), recipe.package.into()),
+                ];
+                if let Some(dir) = display_dir {
+                    view.params.push(("directory".into(), dir));
+                }
+                view.warnings = vec!["warning.localMcpProcess", "warning.network"];
+                self.config_view(
+                    view,
+                    edit,
+                    Verify::McpPresent {
+                        agent: agent_id,
+                        name,
+                        present: true,
+                        origin: None,
                     },
                     "verify.mcpPresent",
                 )
@@ -515,6 +560,11 @@ impl App {
     }
 
     fn prepare_restore(&self, backup_id: &str) -> NexusResult<Plan> {
+        if self.ctx.os != crate::platform::Os::Macos {
+            return Err(
+                NexusError::new("capability.unsupported").with("capability", "restoreBackup")
+            );
+        }
         validate_text(backup_id, 64)?;
         let record = self.store()?.backup(backup_id)?;
         let bytes = self.vault.read(backup_id)?;
@@ -545,49 +595,28 @@ impl App {
         crate::platform::fs::check_mutable_target(&current.source.path)?;
         let text =
             String::from_utf8(bytes.clone()).map_err(|_| NexusError::new("backup.corrupt"))?;
-        let restored_ok = match current.source.format {
-            ConfigFormat::Toml => text.parse::<toml_edit::DocumentMut>().is_ok(),
-            ConfigFormat::Json => {
-                crate::config::jsonc::Document::parse(&text, crate::config::jsonc::Dialect::Json)
-                    .is_ok()
-            }
-            ConfigFormat::Jsonc => {
-                crate::config::jsonc::Document::parse(&text, crate::config::jsonc::Dialect::Jsonc)
-                    .is_ok()
-            }
-        };
-        if !restored_ok {
-            return Err(NexusError::new("backup.restored_invalid"));
-        }
+        let restored_value = parse_config_value(&text, current.source.format)
+            .ok_or_else(|| NexusError::new("backup.restored_invalid"))?;
         if current.source.fingerprint.as_deref() == Some(record.sha256.as_str()) {
             return Err(NexusError::new("config.no_change"));
         }
-        let before_text = current.text.clone().unwrap_or_default();
+        let before_value = if current.source.status == ObsStatus::Observed {
+            current
+                .text
+                .as_deref()
+                .and_then(|t| parse_config_value(t, current.source.format))
+                .unwrap_or(serde_json::Value::Null)
+        } else {
+            serde_json::Value::Null
+        };
         let mut view = self.base_view("restoreBackup", Some(agent));
         view.params = vec![
             ("backupId".into(), backup_id.to_string()),
             ("createdAt".into(), record.created_at.clone()),
             ("location".into(), record.target_display.clone()),
         ];
-        // Execution-sensitive fields reintroduced by an old file must be disclosed (Security §6).
-        let sensitive = [
-            "hooks",
-            "apiKeyHelper",
-            "mcpServers",
-            "mcp_servers",
-            "mcp",
-            "notify",
-            "permissions",
-        ];
-        let had = |t: &str, k: &str| {
-            t.contains(&format!("\"{k}\""))
-                || t.contains(&format!("{k} ="))
-                || t.contains(&format!("[{k}"))
-        };
-        if sensitive
-            .iter()
-            .any(|k| had(&text, k) && !had(&before_text, k))
-        {
+        // Execution-sensitive fields reintroduced or modified by an old file must be disclosed (Security §6).
+        if restore_reintroduces_executable(&before_value, &restored_value) {
             view.warnings.push("warning.restoreReintroducesExecutable");
         }
         if current.source.status == ObsStatus::ParseFailed {
@@ -676,6 +705,9 @@ impl App {
         existing: Option<(String, Option<String>, std::path::PathBuf)>,
         recovers: Option<String>,
     ) -> NexusResult<Plan> {
+        if self.ctx.os != crate::platform::Os::Macos {
+            return Err(NexusError::new("capability.unsupported").with("capability", "lifecycle"));
+        }
         let tools = lifecycle::toolchain(&self.ctx);
         if !lifecycle::available(&recipe, &self.ctx, &tools) {
             return Err(NexusError::new("lifecycle.tool_missing").with("recipe", recipe.id));
@@ -888,6 +920,16 @@ impl App {
         Ok(())
     }
 
+    #[cfg(test)]
+    pub fn force_plan_expiry(&self, plan_id: &str, expires_at: Instant) -> String {
+        let mut guard = self.plans.lock().unwrap();
+        let plan = guard.get_mut(plan_id).unwrap();
+        plan.view.expires_at = expires_at;
+        let d = digest(&plan.view, &plan.payload);
+        plan.view.digest = d.clone();
+        d
+    }
+
     /// Consumes the plan (single use), obtains native confirmation, executes and verifies.
     pub fn confirm(&self, plan_id: &str, digest_from_ui: &str) -> NexusResult<OperationResult> {
         let plan = self
@@ -922,6 +964,9 @@ impl App {
         let result = (|| {
             if !self.confirmer.confirm(&plan.view, &self.locale()) {
                 return Err(NexusError::new("confirmation.denied"));
+            }
+            if plan.view.expires_at <= Instant::now() {
+                return Err(NexusError::new("plan.expired"));
             }
             self.execute(plan)
         })();
@@ -1191,7 +1236,10 @@ impl App {
                 let ext = adapter.observe_extensions(&self.ctx, &configs);
                 let found = ext.mcp.iter().find(|m| &m.name == name);
                 let ok = match (found, present) {
-                    (Some(m), true) => origin.is_none() || m.endpoint_origin == *origin,
+                    (Some(m), true) => match origin {
+                        Some(_) => m.endpoint_origin == *origin,
+                        None => m.transport == McpTransport::Stdio,
+                    },
                     (None, false) => true,
                     _ => false,
                 };
@@ -1480,5 +1528,166 @@ pub fn expand(ctx: &crate::platform::HostContext, display: &str) -> std::path::P
     match display.strip_prefix('~') {
         Some(rest) => ctx.home.join(rest.trim_start_matches(['/', '\\'])),
         None => std::path::PathBuf::from(display),
+    }
+}
+
+fn parse_config_value(text: &str, format: ConfigFormat) -> Option<serde_json::Value> {
+    match format {
+        ConfigFormat::Toml => crate::discovery::toml_to_json(text),
+        ConfigFormat::Json => {
+            crate::config::jsonc::Document::parse(text, crate::config::jsonc::Dialect::Json)
+                .ok()
+                .map(|d| d.value())
+        }
+        ConfigFormat::Jsonc => {
+            crate::config::jsonc::Document::parse(text, crate::config::jsonc::Dialect::Jsonc)
+                .ok()
+                .map(|d| d.value())
+        }
+    }
+}
+
+/// Structural comparison for `restoreBackup` warnings: detects added, re-enabled, or altered
+/// execution-sensitive settings without false positives from comments or unchanged entries.
+pub(crate) fn restore_reintroduces_executable(
+    before: &serde_json::Value,
+    after: &serde_json::Value,
+) -> bool {
+    let Some(after_obj) = after.as_object() else {
+        return false;
+    };
+    let empty = serde_json::Map::new();
+    let before_obj = before.as_object().unwrap_or(&empty);
+    for key in [
+        "hooks",
+        "apiKeyHelper",
+        "statusLine",
+        "awsCredentialExport",
+        "notify",
+        "permissions",
+        "env",
+        "shell_environment_policy",
+    ] {
+        let Some(after_val) = after_obj.get(key) else {
+            continue;
+        };
+        let non_empty = match after_val {
+            serde_json::Value::Null => false,
+            serde_json::Value::String(s) => !s.is_empty(),
+            serde_json::Value::Array(a) => !a.is_empty(),
+            serde_json::Value::Object(o) => !o.is_empty(),
+            _ => true,
+        };
+        if non_empty && before_obj.get(key) != Some(after_val) {
+            return true;
+        }
+    }
+    if let Some(after_gemini_servers) = after_obj.get("mcpServers").and_then(|v| v.as_object()) {
+        if !after_gemini_servers.is_empty() {
+            let str_set = |v: Option<&serde_json::Value>| -> std::collections::BTreeSet<String> {
+                v.and_then(|x| x.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|i| i.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            let before_excluded = str_set(before_obj.get("mcp").and_then(|m| m.get("excluded")));
+            let after_excluded = str_set(after_obj.get("mcp").and_then(|m| m.get("excluded")));
+            if before_excluded.iter().any(|name| {
+                after_gemini_servers.contains_key(name) && !after_excluded.contains(name)
+            }) {
+                return true;
+            }
+            if before_obj
+                .get("mcp")
+                .and_then(|m| m.get("allowed"))
+                .is_some()
+                && before_obj.get("mcp").and_then(|m| m.get("allowed"))
+                    != after_obj.get("mcp").and_then(|m| m.get("allowed"))
+            {
+                return true;
+            }
+        }
+    }
+    for mcp_key in ["mcpServers", "mcp_servers", "mcp"] {
+        let Some(after_servers) = after_obj.get(mcp_key).and_then(|v| v.as_object()) else {
+            continue;
+        };
+        let before_servers = before_obj.get(mcp_key).and_then(|v| v.as_object());
+        for (name, after_srv) in after_servers {
+            if mcp_key == "mcp" && matches!(name.as_str(), "excluded" | "allowed") {
+                continue;
+            }
+            let Some(before_srv) = before_servers.and_then(|m| m.get(name)) else {
+                return true;
+            };
+            if before_srv != after_srv {
+                let mut disabled_before = before_srv.clone();
+                if let Some(o) = disabled_before.as_object_mut() {
+                    o.insert("enabled".into(), serde_json::Value::Bool(false));
+                }
+                if &disabled_before != after_srv {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod restore_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn structural_restore_check_avoids_false_positives_and_catches_injected_servers() {
+        let base = json!({
+            "model": "opus",
+            "mcpServers": {
+                "docs": { "httpUrl": "https://docs.example.com/mcp" }
+            }
+        });
+        let model_only = json!({
+            "model": "sonnet",
+            "mcpServers": {
+                "docs": { "httpUrl": "https://docs.example.com/mcp" }
+            }
+        });
+        assert!(!restore_reintroduces_executable(&base, &model_only));
+
+        let injected = json!({
+            "model": "sonnet",
+            "mcpServers": {
+                "docs": { "httpUrl": "https://docs.example.com/mcp" },
+                "exec": { "command": "npx", "args": ["-y", "pkg"] }
+            }
+        });
+        assert!(restore_reintroduces_executable(&base, &injected));
+
+        let disabled = json!({
+            "mcp_servers": {
+                "files": { "command": "npx", "enabled": false }
+            }
+        });
+        let reenabled = json!({
+            "mcp_servers": {
+                "files": { "command": "npx", "enabled": true }
+            }
+        });
+        assert!(restore_reintroduces_executable(&disabled, &reenabled));
+        assert!(!restore_reintroduces_executable(&reenabled, &disabled));
+
+        let with_comment = parse_config_value(
+            "{\n  // \"hooks\": \"not real\"\n  \"model\": \"sonnet\"\n}\n",
+            ConfigFormat::Jsonc,
+        )
+        .unwrap();
+        assert!(!restore_reintroduces_executable(
+            &json!({"model": "opus"}),
+            &with_comment
+        ));
     }
 }

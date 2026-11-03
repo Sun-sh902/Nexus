@@ -12,6 +12,7 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
   const mode: DataMode = liveBackend() ? 'live' : 'demo';
   const [overview, setOverview] = useState<Overview | null>(null);
   const [models, setModels] = useState<ModelsView | null>(null);
+  const [modelsError, setModelsError] = useState<NexusError | null>(null);
   const [status, setStatus] = useState<NexusData['status']>(mode === 'live' ? 'loading' : 'ready');
   const [error, setError] = useState<NexusError | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -31,7 +32,7 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     } catch (caught) {
       if (mine !== generation.current) return;
       setError(caught instanceof NexusError ? caught : new NexusError({ code: 'ipc.unavailable', params: [], retryable: true }));
-      setStatus(current => current === 'ready' ? 'ready' : 'error');
+      setStatus('error');
     } finally {
       if (mine === generation.current) setRefreshing(false);
     }
@@ -39,11 +40,23 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
 
   const reloadModels = useCallback(async () => {
     if (mode !== 'live') return;
-    try { setModels(await backend.models()); } catch (caught) { setError(caught instanceof NexusError ? caught : null); }
+    try { setModels(await backend.models()); setModelsError(null); }
+    catch (caught) { setModelsError(caught instanceof NexusError ? caught : new NexusError({ code: 'ipc.unavailable', params: [], retryable: true })); }
   }, [mode]);
 
   // Deferred so the scan's state updates never run synchronously inside the effect body.
   useEffect(() => { void Promise.resolve().then(() => load(true)); }, [load]);
+
+  useEffect(() => {
+    if (mode !== 'live' || !overview) return;
+    const expiry = Math.min(...overview.agents.map(agent => Date.parse(agent.health.validUntil)));
+    if (!Number.isFinite(expiry)) return;
+    const timer = window.setTimeout(() => {
+      setError(new NexusError({ code: 'health.evidence_stale', params: [], retryable: true }));
+      setStatus('error');
+    }, Math.max(0, expiry - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [mode, overview]);
 
   const value = useMemo<NexusData>(() => {
     const agents = mode === 'demo' ? demoAgents() : overview ? overview.agents.map(agentView) : [];
@@ -55,10 +68,10 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       scannedAt: mode === 'demo' ? '2026-10-07T02:30:00Z' : overview?.generatedAt ?? null,
       refreshing,
       refresh: () => load(true),
-      models, reloadModels,
+      models, modelsError, reloadModels,
       findAgent: (id: string) => agents.find(agent => agent.id === id),
     };
-  }, [mode, status, error, overview, refreshing, load, models, reloadModels]);
+  }, [mode, status, error, overview, refreshing, load, models, modelsError, reloadModels]);
   return <NexusContext.Provider value={value}>{children}</NexusContext.Provider>;
 }
 
