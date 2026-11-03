@@ -107,8 +107,12 @@ function ExtensionsArea({ agent, flow }: { agent: AgentView; flow: ActionFlow })
   const { t } = useTranslation(['extensions', 'capability']);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
+  const [localRecipe, setLocalRecipe] = useState<'mcp.memory' | 'mcp.filesystem'>('mcp.memory');
+  const [localName, setLocalName] = useState('');
+  const [localDir, setLocalDir] = useState('');
   const caps = agent.report?.snapshot.capabilities ?? [];
   const add = caps.find(c => c.key === 'mcp.addRemote');
+  const addReviewed = caps.find(c => c.key === 'mcp.addReviewed');
   const managed = new Set(agent.report?.snapshot.extensions.mcp.filter(m => m.nexusManaged).map(m => m.name));
   return <div className="extensions-area">
     <ExtensionRows items={agent.extensions} actions={item => {
@@ -127,6 +131,19 @@ function ExtensionsArea({ agent, flow }: { agent: AgentView; flow: ActionFlow })
           <div className="setting-row"><div><label className="setting-label" htmlFor="mcp-url">{t('liveAddUrl')}</label><p className="field-help">{t('liveAddUrlHelp')}</p></div><span className="search-field"><input id="mcp-url" value={url} maxLength={2048} inputMode="url" onChange={event => setUrl(event.target.value)} /></span></div>
           <div className="plan-actions"><button className="button" disabled={!name || !url || flow.busy !== null} onClick={() => void flow.prepare({ kind: 'addRemoteMcp', agentId: agent.id, name, url })}>{t('liveAddPreview')}</button></div>
           <p className="field-help">{t('liveStdioNotice')}</p>
+        </>}
+      </div>
+    </section>}
+    {agent.report && <section className="sheet add-mcp" aria-labelledby="add-reviewed-mcp-title">
+      <header className="sheet-head"><h2 id="add-reviewed-mcp-title" className="sheet-title">{t('liveReviewedTitle')}</h2><span className="kicker">{t('liveReviewedKicker')}</span></header>
+      <div className="sheet-body form-stack">
+        {addReviewed?.support === 'unsupported' ? <Notice>{t(`capability:${addReviewed.reason ?? 'capability.unsupported'}`)}</Notice> : <>
+          <div className="setting-row"><div><label className="setting-label" htmlFor="mcp-reviewed-recipe">{t('liveReviewedRecipe')}</label><p className="field-help">{t('liveReviewedRecipeHelp')}</p></div>
+            <span className="select-control"><select id="mcp-reviewed-recipe" value={localRecipe} onChange={event => setLocalRecipe(event.target.value as 'mcp.memory' | 'mcp.filesystem')}>{(['mcp.memory', 'mcp.filesystem'] as const).map(recipe => <option key={recipe} value={recipe}>{t(`recipe.${recipe}`)}</option>)}</select><ChevronDown size={14} aria-hidden="true" /></span></div>
+          <div className="setting-row"><div><label className="setting-label" htmlFor="mcp-reviewed-name">{t('liveAddName')}</label><p className="field-help">{t('liveAddNameHelp')}</p></div><span className="search-field"><input id="mcp-reviewed-name" value={localName} maxLength={64} onChange={event => setLocalName(event.target.value)} /></span></div>
+          {localRecipe === 'mcp.filesystem' && <div className="setting-row"><div><label className="setting-label" htmlFor="mcp-reviewed-dir">{t('liveReviewedDir')}</label><p className="field-help">{t('liveReviewedDirHelp')}</p></div><span className="search-field"><input id="mcp-reviewed-dir" className="mono" value={localDir} maxLength={1024} onChange={event => setLocalDir(event.target.value)} /></span></div>}
+          <div className="plan-actions"><button className="button" disabled={!localName || (localRecipe === 'mcp.filesystem' && !localDir) || flow.busy !== null} onClick={() => void flow.prepare({ kind: 'addReviewedMcp', agentId: agent.id, name: localName, recipeId: localRecipe, directory: localRecipe === 'mcp.filesystem' ? localDir : undefined })}>{t('liveAddPreview')}</button></div>
+          <p className="field-help">{t('liveReviewedBoundary')}</p>
         </>}
       </div>
     </section>}
@@ -158,7 +175,7 @@ function Installations({ agent, flow }: { agent: AgentView; flow: ActionFlow }) 
 }
 
 function Configuration({ agent, flow }: { agent: AgentView; flow: ActionFlow }) {
-  const { t } = useTranslation(['agents', 'common', 'actions', 'capability']);
+  const { t } = useTranslation(['agents', 'common', 'actions', 'capability', 'health']);
   const { locale } = usePreferences();
   const [history, setHistory] = useState<AgentHistory | null>(null);
   const r = agent.report;
@@ -189,6 +206,14 @@ function Configuration({ agent, flow }: { agent: AgentView; flow: ActionFlow }) 
         <button className="button button-small" disabled={flow.busy !== null} onClick={() => void flow.prepare({ kind: 'restoreBackup', backupId: b.id })}>{t('actions:repair.restoreBackup')}</button>
       </li>)}</ul></div> : <EmptyState title={t('noBackups')} description={t('noBackupsHelp')} />}
     </Section>
+    <Section title={t('operationsHistoryTitle')} aside={<span className="kicker">{t('operationsHistoryKicker')}</span>}>
+      {history && history.operations.length ? <div className="sheet"><ul className="fact-rows">{history.operations.map(op => <li key={op.id}>
+        <strong>{t(`actions:kind.${op.action}`)}</strong><span>{t(`actions:status.${op.status}`)}</span><time className="mono" dateTime={op.startedAt}>{formatTimestamp(op.startedAt, locale)}</time>
+      </li>)}</ul></div> : <EmptyState title={t('noOperationsHistory')} description={t('noOperationsHistoryHelp')} />}
+    </Section>
+    {history && history.health.length > 0 && <Section title={t('healthHistoryTitle')}><div className="sheet"><ul className="fact-rows">{history.health.slice(0, 8).map((row, idx) => <li key={`${row.evaluatedAt}-${idx}`}>
+      <strong>{t(`health:${row.readiness}`)}</strong><span className="mono">{row.issueCodes.length ? row.issueCodes.join(', ') : t('healthHistoryNoIssues')}</span><time className="mono" dateTime={row.evaluatedAt}>{formatTimestamp(row.evaluatedAt, locale)}</time>
+    </li>)}</ul></div></Section>}
     <ActionPanel flow={flow} />
   </div>;
 }

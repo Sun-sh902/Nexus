@@ -17,6 +17,7 @@ export interface NexusData {
   refreshing: boolean;
   refresh: () => Promise<void>;
   models: ModelsView | null;
+  modelsError: NexusError | null;
   reloadModels: () => Promise<void>;
   findAgent: (id: string) => AgentView | undefined;
 }

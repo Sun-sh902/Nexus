@@ -288,6 +288,7 @@ impl AgentAdapter for Gemini {
             cap("mcp.read", level, None),
             cap("mcp.toggle", level, None),
             cap("mcp.addRemote", level, None),
+            cap("mcp.addReviewed", level, None),
             cap("skills.read", level, None),
             cap(
                 "skills.write",
@@ -425,6 +426,27 @@ impl McpTarget for Gemini {
             &read,
             &["mcpServers", name],
             serde_json::json!({ "httpUrl": url }),
+        )
+    }
+    fn plan_add_stdio(
+        &self,
+        ctx: &HostContext,
+        name: &str,
+        command: &str,
+        args: &[String],
+    ) -> NexusResult<ConfigEdit> {
+        validate_mcp_name(name)?;
+        let read = user_settings(ctx);
+        if config_value(&read)
+            .and_then(|v| v.get("mcpServers").and_then(|m| m.get(name)).cloned())
+            .is_some()
+        {
+            return Err(NexusError::new("extension.name_conflict"));
+        }
+        plan_json_set(
+            &read,
+            &["mcpServers", name],
+            serde_json::json!({ "command": command, "args": args }),
         )
     }
     fn plan_remove(&self, ctx: &HostContext, name: &str) -> NexusResult<ConfigEdit> {

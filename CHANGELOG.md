@@ -1,10 +1,24 @@
 # Changelog
 
-## Unreleased
+## 0.2.1-beta.1 — 2026-11-03 (pre-release, Core Backend Beta Candidate)
 
-### Changed
-- English-only interface: removed Simplified Chinese, the language selector in the toolbar and Settings, and the Chinese fonts (smaller app bundle).
-- Detailed README with screenshots and a feature guide.
+Iteration 1 hardening release toward the Phase 7 public Beta gate. Closes security, freshness, comment-preservation, MCP management, Model Profile lifecycle, local retention, and redacted diagnostic export gaps while keeping Phases 1–7 boundaries intact.
+
+### Added
+- **Reviewed local stdio MCP recipes (`addReviewedMcp`)** for OpenAI Codex, Gemini CLI and OpenCode: compiled `@modelcontextprotocol/server-memory` and `@modelcontextprotocol/server-filesystem` recipes via `npx`, with strict `$HOME` non-hidden directory confinement, native confirmation disclosure, postcondition verification, and managed removal.
+- **Model Profile deletion and revision impact UI**: `nexus_delete_profile` refuses deletion while assigned (`profile.in_use`); the Models page shows per-Profile revision alignment across assigned Agents and warns before saving a new revision.
+- **Settings — Local data & retention**: live SQLite database and encrypted backup vault usage (`nexus_storage_status`) plus bounded history pruning (`nexus_prune_history`) that preserves unresolved operations, the latest backup per configuration file, and the latest readiness scan per Agent.
+- **Settings — Redacted diagnostic export**: preview-required JSON bundle (`nexus_diagnostic_preview`) with `~`-minimized paths and automatic token redaction, plus explicit Copy JSON and Save JSON actions.
+- **Agent operation and readiness history** in Agent Detail → Configuration (`Recent Agent operations` and `Recent readiness checks`).
+- **GitHub Actions CI (`.github/workflows/ci.yml`)** running TypeScript, ESLint, Vitest, Vite production build, `rustfmt`, `clippy -D warnings`, and Rust tests across macOS and Windows, plus Playwright UI and `axe` accessibility tests on macOS.
+
+### Fixed & Hardened
+- **Span-preserving JSON/JSONC member removal**: `config::jsonc::Document::remove` now uses comment-aware comma scanning so standalone and inline comments survive first, middle, last, sole, and CRLF member removals.
+- **Structural `restoreBackup` execution-sensitive detection**: replaced substring matching with structural `serde_json::Value` comparison across hooks, credential helpers, shell policies, and MCP entries.
+- **Managed MCP hydration in `App::report`**: `server.nexus_managed` is now hydrated from `managed_extensions`, enabling safe removal of Nexus-added remote and reviewed local MCP servers in Agent Detail and Extensions.
+- **Plan expiry re-check after native confirmation**: `App::confirm` re-verifies `plan.expires_at` immediately after the OS confirmation dialog returns so a stalled dialog cannot execute a stale plan.
+- **No raw configuration diffs over IPC**: `ConfigEdit` omits raw file diff lines and `ProviderProfile` skips `secret_ref` serialization over IPC; frontend freshness timers invalidate stale snapshots cleanly.
+- **English-only (`en-US`) interface and documentation**: removed Simplified Chinese catalogs/fonts and added a comprehensive README with screenshots.
 
 ## 0.2.0-beta.1 — 2026-10-27 (pre-release, Core Backend Beta Candidate)
 

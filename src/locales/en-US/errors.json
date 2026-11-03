@@ -58,6 +58,7 @@
   "provider.no_secret_reference": "This Provider does not use a stored credential.",
   "provider.builtin_read_only": "Built-in Providers cannot be removed.",
   "profile.not_found": "Profile not found.",
+  "profile.in_use": "The profile is assigned to an Agent. Reassign that Agent before removing it.",
   "profile.invalid_reasoning": "Invalid reasoning preference.",
   "assignment.not_found": "No model assignment is saved for this Agent.",
   "assignment.invalid": "Choose a model or profile.",
@@ -72,6 +73,10 @@
   "extension.name_conflict": "A server with this name already exists.",
   "extension.allowlist_policy": "An MCP allow-list is configured; Nexus will not change it.",
   "extension.not_managed": "Only servers added by Nexus can be removed here.",
+  "extension.unknown_recipe": "Unknown MCP server recipe.",
+  "extension.runtime_missing": "npx was not found on PATH; install Node.js before adding a local MCP server.",
+  "extension.invalid_directory": "Enter an existing project folder path inside your home directory.",
+  "extension.unsafe_directory": "For safety, choose a non-hidden project folder inside your home directory (not ~ itself or a dotfile folder).",
   "capability.unsupported": "Not supported for this Agent here.",
   "lifecycle.invalid_version": "Invalid version.",
   "lifecycle.tool_missing": "The required package manager was not found.",
@@ -99,5 +104,6 @@
   "ipc.unavailable": "The Nexus backend is unavailable.",
   "ipc.contract_mismatch": "Frontend and backend versions do not match.",
   "model.routing_mismatch": "This Agent currently routes to {{route}}; Nexus will not write a model for a different Provider.",
-  "lifecycle.prefix_unknown": "The npm prefix that owns this installation could not be determined, so Nexus will not change it."
+  "lifecycle.prefix_unknown": "The npm prefix that owns this installation could not be determined, so Nexus will not change it.",
+  "health.evidence_stale": "The previous scan has expired. Scan again to update readiness."
 }

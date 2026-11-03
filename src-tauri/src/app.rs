@@ -95,6 +95,97 @@ pub struct AgentHistory {
     pub health: Vec<crate::store::HealthHistoryRow>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageStatus {
+    pub data_dir: String,
+    pub db_bytes: u64,
+    pub backup_count: usize,
+    pub backup_bytes: u64,
+    pub operation_count: i64,
+    pub unresolved_count: i64,
+    pub health_row_count: i64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PruneResult {
+    pub pruned_operations: usize,
+    pub pruned_health_rows: usize,
+    pub pruned_backups: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticTool {
+    pub key: String,
+    pub present: bool,
+    pub version: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticSystem {
+    pub os: crate::platform::Os,
+    pub os_version: Option<String>,
+    pub arch: String,
+    pub data_dir: String,
+    pub tools: Vec<DiagnosticTool>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticConfigSource {
+    pub id: String,
+    pub scope: ConfigScope,
+    pub location: String,
+    pub status: ObsStatus,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticAgent {
+    pub agent_id: AgentId,
+    pub readiness: Readiness,
+    pub installed: bool,
+    pub primary_source: Option<InstallSource>,
+    pub version: Option<String>,
+    pub config_sources: Vec<DiagnosticConfigSource>,
+    pub auth_evidence: Vec<AuthEvidence>,
+    pub mcp_count: usize,
+    pub skill_count: usize,
+    pub finding_codes: Vec<String>,
+    pub non_passing_checks: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticOperation {
+    pub action: String,
+    pub agent_id: Option<String>,
+    pub status: String,
+    pub error_code: Option<String>,
+    pub started_at: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticBundle {
+    pub schema_version: u8,
+    pub generated_at: Instant,
+    pub app_version: &'static str,
+    pub system: DiagnosticSystem,
+    pub agents: Vec<DiagnosticAgent>,
+    pub recent_operations: Vec<DiagnosticOperation>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticPreview {
+    pub filename: String,
+    pub json: String,
+}
+
 impl App {
     pub fn new(
         ctx: HostContext,
@@ -269,11 +360,15 @@ impl App {
 
     fn report(
         &self,
-        snap: AgentSnapshot,
+        mut snap: AgentSnapshot,
         system: &SystemSnapshot,
         now: Instant,
         ops: &[OperationRecord],
     ) -> NexusResult<AgentReport> {
+        let managed_mcp = self.store()?.managed_extensions(snap.agent_id)?;
+        for server in &mut snap.extensions.mcp {
+            server.nexus_managed = managed_mcp.contains(&server.name);
+        }
         let resolved = self.resolve_assignment(snap.agent_id).unwrap_or(None);
         let ctx = match &resolved {
             Some(r) => AssignmentContext {
@@ -358,7 +453,13 @@ impl App {
                 .map_err(|_| NexusError::new("app.state_poisoned"))?
                 .clone()
             {
-                return Ok(cached);
+                if cached
+                    .agents
+                    .iter()
+                    .all(|a| a.health.valid_until > Instant::now())
+                {
+                    return Ok(cached);
+                }
             }
         }
         let now = Instant::now();
@@ -660,6 +761,149 @@ impl App {
         self.invalidate();
         self.resolve_assignment(agent)
     }
+
+    pub fn delete_profile(&self, id: &str) -> NexusResult<()> {
+        self.store()?.delete_profile(id)?;
+        self.invalidate();
+        Ok(())
+    }
+
+    pub fn storage_status(&self) -> NexusResult<StorageStatus> {
+        let counts = self.store()?.counts()?;
+        let mut db_bytes = 0u64;
+        for name in ["nexus.db", "nexus.db-wal"] {
+            if let Ok(meta) = std::fs::metadata(self.ctx.data_dir.join(name)) {
+                db_bytes = db_bytes.saturating_add(meta.len());
+            }
+        }
+        let (vault_files, backup_bytes) = self.vault.disk_usage();
+        Ok(StorageStatus {
+            data_dir: self.ctx.display_path(&self.ctx.data_dir),
+            db_bytes,
+            backup_count: (counts.backup_count.max(0) as usize).max(vault_files),
+            backup_bytes,
+            operation_count: counts.operation_count,
+            unresolved_count: counts.unresolved_count,
+            health_row_count: counts.health_row_count,
+        })
+    }
+
+    pub fn prune_history(&self, retain_days: u32) -> NexusResult<PruneResult> {
+        if retain_days > 3650 {
+            return Err(NexusError::new("ipc.invalid_input"));
+        }
+        let cutoff = if retain_days == 0 {
+            Instant::now().plus_secs(1)
+        } else {
+            Instant(
+                Instant::now()
+                    .0
+                    .saturating_sub((retain_days as i64) * 86_400),
+            )
+        };
+        let summary = self.store()?.prune_history(&cutoff.to_rfc3339())?;
+        for id in &summary.pruned_backup_ids {
+            let _ = self.vault.remove(id);
+        }
+        self.invalidate();
+        Ok(PruneResult {
+            pruned_operations: summary.pruned_operations,
+            pruned_health_rows: summary.pruned_health_rows,
+            pruned_backups: summary.pruned_backup_ids.len(),
+        })
+    }
+
+    /// Generates a redacted, user-previewable diagnostic bundle. Contains readiness, check IDs,
+    /// finding codes, and `~`-relative paths only — never secrets, raw configuration, or process
+    /// output (Security §6/§7, AGENTS.md).
+    pub fn diagnostic_preview(&self) -> NexusResult<DiagnosticPreview> {
+        let overview = self.overview(false)?;
+        let bundle = DiagnosticBundle {
+            schema_version: 1,
+            generated_at: Instant::now(),
+            app_version: env!("CARGO_PKG_VERSION"),
+            system: DiagnosticSystem {
+                os: overview.system.os,
+                os_version: overview.system.os_version.value,
+                arch: overview.system.arch.to_string(),
+                data_dir: overview.system.data_dir,
+                tools: overview
+                    .system
+                    .tools
+                    .into_iter()
+                    .map(|t| DiagnosticTool {
+                        key: t.key.to_string(),
+                        present: t.present,
+                        version: t.version.value,
+                    })
+                    .collect(),
+            },
+            agents: overview
+                .agents
+                .into_iter()
+                .map(|r| {
+                    let primary = r.snapshot.primary_installation().cloned();
+                    DiagnosticAgent {
+                        agent_id: r.snapshot.agent_id,
+                        readiness: r.health.readiness,
+                        installed: !r.snapshot.installations.is_empty(),
+                        primary_source: primary.as_ref().map(|i| i.source),
+                        version: primary.and_then(|i| i.version.value),
+                        config_sources: r
+                            .snapshot
+                            .config_sources
+                            .into_iter()
+                            .map(|c| DiagnosticConfigSource {
+                                id: c.id,
+                                scope: c.scope,
+                                location: c.location,
+                                status: c.status,
+                            })
+                            .collect(),
+                        auth_evidence: r.snapshot.auth.evidence,
+                        mcp_count: r.snapshot.extensions.mcp.len(),
+                        skill_count: r.snapshot.extensions.skills.len(),
+                        finding_codes: r.findings.into_iter().map(|f| f.code).collect(),
+                        non_passing_checks: r
+                            .health
+                            .checks
+                            .into_iter()
+                            .filter(|c| {
+                                matches!(
+                                    c.outcome,
+                                    crate::health::Outcome::Fail | crate::health::Outcome::Unknown
+                                )
+                            })
+                            .map(|c| c.id.to_string())
+                            .collect(),
+                    }
+                })
+                .collect(),
+            recent_operations: overview
+                .recent_operations
+                .into_iter()
+                .map(|op| DiagnosticOperation {
+                    action: op.action,
+                    agent_id: op.agent_id,
+                    status: op.status,
+                    error_code: op.error_code,
+                    started_at: op.started_at,
+                })
+                .collect(),
+        };
+        let raw = serde_json::to_string_pretty(&bundle)
+            .map_err(|_| NexusError::new("app.task_failed"))?;
+        let home_str = self.ctx.home.to_string_lossy();
+        let minimized = if !home_str.is_empty() && home_str != "/" {
+            raw.replace(home_str.as_ref(), "~")
+        } else {
+            raw
+        };
+        Ok(DiagnosticPreview {
+            filename: "nexus-diagnostics.json".into(),
+            json: crate::core::redact(&minimized),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -675,12 +919,27 @@ pub mod test_support {
     }
 
     pub fn app(home: &std::path::Path, confirm: bool) -> App {
-        let ctx = HostContext::isolated(home, &home.join("nexus-data"));
+        app_with_confirmer(home, Box::new(Fixed(confirm)), false)
+    }
+
+    pub fn app_with_confirmer(
+        home: &std::path::Path,
+        confirmer: Box<dyn Confirmer>,
+        disk_store: bool,
+    ) -> App {
+        let data_dir = home.join("nexus-data");
+        let ctx = HostContext::isolated(home, &data_dir);
+        let store = if disk_store {
+            crate::platform::fs::ensure_private_dir(&data_dir).unwrap();
+            Store::open(&data_dir.join("nexus.db")).unwrap()
+        } else {
+            Store::open_in_memory().unwrap()
+        };
         App::new(
             ctx,
-            Store::open_in_memory().unwrap(),
+            store,
             Arc::new(MemorySecretStore::default()),
-            Box::new(Fixed(confirm)),
+            confirmer,
         )
         .unwrap()
     }

@@ -105,7 +105,103 @@ pub trait ModelTarget: Send + Sync {
 pub trait McpTarget: Send + Sync {
     fn plan_toggle(&self, ctx: &HostContext, name: &str, enabled: bool) -> NexusResult<ConfigEdit>;
     fn plan_add_remote(&self, ctx: &HostContext, name: &str, url: &str) -> NexusResult<ConfigEdit>;
+    fn plan_add_stdio(
+        &self,
+        ctx: &HostContext,
+        name: &str,
+        command: &str,
+        args: &[String],
+    ) -> NexusResult<ConfigEdit>;
     fn plan_remove(&self, ctx: &HostContext, name: &str) -> NexusResult<ConfigEdit>;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ReviewedMcpRecipe {
+    pub id: &'static str,
+    pub package: &'static str,
+    pub requires_directory: bool,
+}
+
+pub const REVIEWED_MCP_RECIPES: &[ReviewedMcpRecipe] = &[
+    ReviewedMcpRecipe {
+        id: "mcp.memory",
+        package: "@modelcontextprotocol/server-memory",
+        requires_directory: false,
+    },
+    ReviewedMcpRecipe {
+        id: "mcp.filesystem",
+        package: "@modelcontextprotocol/server-filesystem",
+        requires_directory: true,
+    },
+];
+
+/// Resolves a compiled local stdio MCP recipe into an exact `(command, args)` pair without shell
+/// expansion. Directory-scoped recipes must point to a real, non-hidden project directory inside
+/// the user's home folder and outside Nexus's own data directory.
+pub fn resolve_reviewed_mcp(
+    ctx: &HostContext,
+    recipe_id: &str,
+    directory: Option<&str>,
+) -> NexusResult<(
+    &'static ReviewedMcpRecipe,
+    &'static str,
+    Vec<String>,
+    Option<String>,
+)> {
+    let recipe = REVIEWED_MCP_RECIPES
+        .iter()
+        .find(|r| r.id == recipe_id)
+        .ok_or_else(|| crate::core::NexusError::new("extension.unknown_recipe"))?;
+    if discovery::command_resolvable(ctx, "npx") != Some(true) {
+        return Err(crate::core::NexusError::new("extension.runtime_missing"));
+    }
+    let mut args = vec!["-y".to_string(), recipe.package.to_string()];
+    if !recipe.requires_directory {
+        if directory.is_some_and(|d| !d.trim().is_empty()) {
+            return Err(crate::core::NexusError::new("ipc.invalid_input"));
+        }
+        return Ok((recipe, "npx", args, None));
+    }
+    let raw = directory
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+        .ok_or_else(|| crate::core::NexusError::new("extension.invalid_directory"))?;
+    if raw.len() > 1024 || raw.starts_with('-') || raw.chars().any(|c| c.is_control()) {
+        return Err(crate::core::NexusError::new("extension.invalid_directory"));
+    }
+    let candidate = if raw == "~" {
+        return Err(crate::core::NexusError::new("extension.unsafe_directory"));
+    } else if let Some(rest) = raw.strip_prefix("~/").or_else(|| raw.strip_prefix("~\\")) {
+        ctx.home.join(rest)
+    } else {
+        std::path::PathBuf::from(raw)
+    };
+    if !candidate.is_absolute() {
+        return Err(crate::core::NexusError::new("extension.invalid_directory"));
+    }
+    let meta = std::fs::symlink_metadata(&candidate)
+        .map_err(|_| crate::core::NexusError::new("extension.invalid_directory"))?;
+    if meta.file_type().is_symlink() || !meta.is_dir() {
+        return Err(crate::core::NexusError::new("extension.unsafe_directory"));
+    }
+    let canonical = std::fs::canonicalize(&candidate)
+        .map_err(|_| crate::core::NexusError::new("extension.invalid_directory"))?;
+    let canonical_home = std::fs::canonicalize(&ctx.home).unwrap_or_else(|_| ctx.home.clone());
+    let canonical_data =
+        std::fs::canonicalize(&ctx.data_dir).unwrap_or_else(|_| ctx.data_dir.clone());
+    let Ok(rel) = canonical.strip_prefix(&canonical_home) else {
+        return Err(crate::core::NexusError::new("extension.unsafe_directory"));
+    };
+    let Some(first) = rel.components().next() else {
+        return Err(crate::core::NexusError::new("extension.unsafe_directory"));
+    };
+    if first.as_os_str().to_string_lossy().starts_with('.')
+        || canonical.starts_with(&canonical_data)
+    {
+        return Err(crate::core::NexusError::new("extension.unsafe_directory"));
+    }
+    args.push(canonical.to_string_lossy().to_string());
+    Ok((recipe, "npx", args, Some(ctx.display_path(&candidate))))
 }
 
 pub fn registry() -> Vec<Box<dyn AgentAdapter>> {

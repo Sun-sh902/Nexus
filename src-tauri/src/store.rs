@@ -117,6 +117,22 @@ pub struct LedgerEntry {
     pub at: String,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreCounts {
+    pub operation_count: i64,
+    pub unresolved_count: i64,
+    pub health_row_count: i64,
+    pub backup_count: i64,
+}
+
+#[derive(Clone, Debug)]
+pub struct PruneSummary {
+    pub pruned_operations: usize,
+    pub pruned_health_rows: usize,
+    pub pruned_backup_ids: Vec<String>,
+}
+
 impl Store {
     pub fn open(path: &Path) -> NexusResult<Store> {
         let conn = Connection::open(path).map_err(|_| NexusError::new("store.open_failed"))?;
@@ -342,6 +358,29 @@ impl Store {
             .execute("INSERT INTO model_profiles (id, revision, name, model_id, reasoning, created_at) VALUES (?1,?2,?3,?4,?5,?6)", params![id, next, name, model_id, reasoning, now.to_rfc3339()])
             .map_err(db_err)?;
         Ok(next)
+    }
+
+    /// Deleting a Profile still referenced by an Agent assignment is refused (Architecture §9).
+    pub fn delete_profile(&self, id: &str) -> NexusResult<()> {
+        let refs: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM assignments WHERE profile_id = ?1",
+                [id],
+                |r| r.get(0),
+            )
+            .map_err(db_err)?;
+        if refs > 0 {
+            return Err(NexusError::new("profile.in_use").with("agents", refs.to_string()));
+        }
+        let deleted = self
+            .conn
+            .execute("DELETE FROM model_profiles WHERE id = ?1", [id])
+            .map_err(db_err)?;
+        if deleted == 0 {
+            return Err(NexusError::new("profile.not_found"));
+        }
+        Ok(())
     }
 
     // ---- Assignments -----------------------------------------------------------------------
@@ -719,6 +758,99 @@ impl Store {
             .map_err(db_err)?;
         rows.collect::<Result<_, _>>().map_err(db_err)
     }
+
+    // ---- Local storage & retention (Security §6) -------------------------------------------
+
+    pub fn counts(&self) -> NexusResult<StoreCounts> {
+        let operation_count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM operations", [], |r| r.get(0))
+            .map_err(db_err)?;
+        let unresolved_count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM operations WHERE status IN ('executing', 'interrupted')",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(db_err)?;
+        let health_row_count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM health_history", [], |r| r.get(0))
+            .map_err(db_err)?;
+        let backup_count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM backups", [], |r| r.get(0))
+            .map_err(db_err)?;
+        Ok(StoreCounts {
+            operation_count,
+            unresolved_count,
+            health_row_count,
+            backup_count,
+        })
+    }
+
+    /// Prunes resolved history older than `cutoff_rfc3339`. Unresolved (`executing` /
+    /// `interrupted`) operations, their backups, the newest backup per target, and the newest
+    /// health row per Agent are always preserved.
+    pub fn prune_history(&self, cutoff_rfc3339: &str) -> NexusResult<PruneSummary> {
+        let tx = self.conn.unchecked_transaction().map_err(db_err)?;
+        let pruned_backup_ids: Vec<String> = {
+            let mut stmt = tx
+                .prepare(
+                    "SELECT id FROM backups
+                     WHERE created_at < ?1
+                       AND operation_id NOT IN (
+                         SELECT id FROM operations WHERE status IN ('executing', 'interrupted')
+                       )
+                       AND rowid NOT IN (
+                         SELECT b2.rowid FROM backups b2
+                         WHERE COALESCE(b2.agent_id, '') = COALESCE(backups.agent_id, '')
+                           AND b2.target_id = backups.target_id
+                         ORDER BY b2.created_at DESC, b2.rowid DESC LIMIT 1
+                       )",
+                )
+                .map_err(db_err)?;
+            let rows = stmt
+                .query_map([cutoff_rfc3339], |r| r.get(0))
+                .map_err(db_err)?;
+            rows.collect::<Result<_, _>>().map_err(db_err)?
+        };
+        for id in &pruned_backup_ids {
+            tx.execute("DELETE FROM backups WHERE id = ?1", [id])
+                .map_err(db_err)?;
+        }
+        tx.execute(
+            "DELETE FROM operation_steps WHERE operation_id IN (
+               SELECT id FROM operations
+               WHERE status NOT IN ('executing', 'interrupted') AND started_at < ?1
+             )",
+            [cutoff_rfc3339],
+        )
+        .map_err(db_err)?;
+        let pruned_operations = tx
+            .execute(
+                "DELETE FROM operations
+                 WHERE status NOT IN ('executing', 'interrupted') AND started_at < ?1",
+                [cutoff_rfc3339],
+            )
+            .map_err(db_err)?;
+        let pruned_health_rows = tx
+            .execute(
+                "DELETE FROM health_history
+                 WHERE evaluated_at < ?1
+                   AND id NOT IN (SELECT MAX(id) FROM health_history GROUP BY agent_id)",
+                [cutoff_rfc3339],
+            )
+            .map_err(db_err)?;
+        tx.commit().map_err(db_err)?;
+        let _ = self.conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+        Ok(PruneSummary {
+            pruned_operations,
+            pruned_health_rows,
+            pruned_backup_ids,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -761,6 +893,110 @@ mod tests {
         assert_eq!(s.profiles().unwrap()[0].revision, 2);
         assert!(s.profile_revision("p", 1).unwrap().is_some());
         assert_eq!(s.delete_model("m1").unwrap_err().code, "model.in_use");
+        s.set_desired(
+            AgentId::Codex,
+            AssignmentMode::Profile,
+            None,
+            Some("p"),
+            Some(2),
+            now,
+        )
+        .unwrap();
+        assert_eq!(s.delete_profile("p").unwrap_err().code, "profile.in_use");
+        s.clear_assignment(AgentId::Codex).unwrap();
+        s.delete_profile("p").unwrap();
+        assert!(s.profiles().unwrap().is_empty());
+        assert_eq!(s.delete_profile("p").unwrap_err().code, "profile.not_found");
+    }
+
+    #[test]
+    fn prune_history_preserves_unresolved_ops_and_latest_target_backups() {
+        let s = Store::open_in_memory().unwrap();
+        s.begin_operation(
+            "op_done_old",
+            "applyModel",
+            Some(AgentId::Codex),
+            "d1",
+            &serde_json::json!({}),
+            Instant(100),
+        )
+        .unwrap();
+        s.finish_operation("op_done_old", "succeeded", None, Instant(101))
+            .unwrap();
+        s.insert_backup(
+            "bak_00000000000000000000000000000001",
+            "op_done_old",
+            Some(AgentId::Codex),
+            "codex.user",
+            "/tmp/c",
+            "~/.codex/config.toml",
+            "sha1",
+            10,
+            Instant(100),
+        )
+        .unwrap();
+        s.begin_operation(
+            "op_done_newer",
+            "applyModel",
+            Some(AgentId::Codex),
+            "d2",
+            &serde_json::json!({}),
+            Instant(200),
+        )
+        .unwrap();
+        s.finish_operation("op_done_newer", "succeeded", None, Instant(201))
+            .unwrap();
+        s.insert_backup(
+            "bak_00000000000000000000000000000002",
+            "op_done_newer",
+            Some(AgentId::Codex),
+            "codex.user",
+            "/tmp/c",
+            "~/.codex/config.toml",
+            "sha2",
+            12,
+            Instant(200),
+        )
+        .unwrap();
+        s.begin_operation(
+            "op_interrupted",
+            "install",
+            Some(AgentId::Gemini),
+            "d3",
+            &serde_json::json!({}),
+            Instant(150),
+        )
+        .unwrap();
+        s.finish_operation(
+            "op_interrupted",
+            "interrupted",
+            Some("operation.interrupted"),
+            Instant(151),
+        )
+        .unwrap();
+        s.record_health(AgentId::Codex, "ready", "v1", &[], Instant(100))
+            .unwrap();
+        s.record_health(
+            AgentId::Codex,
+            "attention",
+            "v1",
+            &["x".into()],
+            Instant(200),
+        )
+        .unwrap();
+
+        let summary = s.prune_history(&Instant(500).to_rfc3339()).unwrap();
+        assert_eq!(summary.pruned_operations, 2);
+        assert_eq!(summary.pruned_health_rows, 1);
+        assert_eq!(
+            summary.pruned_backup_ids,
+            vec!["bak_00000000000000000000000000000001".to_string()]
+        );
+        let counts = s.counts().unwrap();
+        assert_eq!(counts.operation_count, 1);
+        assert_eq!(counts.unresolved_count, 1);
+        assert_eq!(counts.health_row_count, 1);
+        assert_eq!(counts.backup_count, 1);
     }
 
     #[test]

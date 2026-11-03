@@ -6,7 +6,7 @@ Nexus is a local-first desktop app for macOS (Windows support is implemented but
 
 ![Home: readiness of four agents with a per-agent readiness path](docs/screenshots/home.png)
 
-> **Status: 0.2.0-beta.1 pre-release — Core Backend Beta Candidate.** Validated on macOS (Apple Silicon). Windows code paths exist but have not been built or tested. The pre-release DMG is ad-hoc signed and **not notarized**. See [Known limitations](#known-limitations).
+> **Status: 0.2.1-beta.1 pre-release — Core Backend Beta Candidate.** Validated on macOS (Apple Silicon) with automated macOS + Windows CI. Windows runtime validation is still open before public Beta. The pre-release DMG is ad-hoc signed and **not notarized**. See [Known limitations](#known-limitations).
 
 ## Contents
 
@@ -101,13 +101,13 @@ The Model tab explains **where the effective model comes from**, highest priorit
 
 ### Extensions: MCP and Skills
 
-Nexus lists every MCP server configured for each agent, showing transport, command name or origin only (never arguments or secrets), and lists Skills. It never starts a server or runs a Skill. Where supported, you can enable or disable a server, add a remote HTTPS server, or remove servers Nexus itself added. Entries you created are shown but never deleted.
+Nexus lists every MCP server configured for each agent, showing transport, command name or origin only (never arguments or secrets), and lists Skills. It never starts a server or runs a Skill. Where supported, you can enable or disable a server, add a remote HTTPS server, add a **reviewed local stdio server** from compiled reference recipes (`@modelcontextprotocol/server-memory` or `@modelcontextprotocol/server-filesystem` confined to an existing non-hidden folder inside `~`), or remove servers Nexus itself added. Arbitrary command strings are never accepted, and entries you created are shown but never deleted.
 
 ![Extensions: MCP servers with enable and disable actions](docs/screenshots/extensions.png)
 
 ### Configuration, lifecycle and backups
 
-The Configuration tab lists installations (with **Open in Terminal**, **Update** and **Uninstall** where a vetted recipe applies), configuration sources, authentication evidence, a per-agent capability matrix explaining anything unsupported, and encrypted configuration backups with restore.
+The Configuration tab lists installations (with **Open in Terminal**, **Update** and **Uninstall** where a vetted recipe applies), configuration sources, authentication evidence, a per-agent capability matrix explaining anything unsupported, encrypted configuration backups with restore, and per-agent operation and readiness history. In **Settings**, you can inspect Nexus's local SQLite and backup vault usage, prune resolved history while keeping unresolved operations and the latest backup per file, and preview/export a redacted diagnostic JSON summary.
 
 ![Configuration tab: installations and configuration sources](docs/screenshots/configuration.png)
 
@@ -129,7 +129,7 @@ macOS is verified on Apple Silicon; Windows is implemented but unverified.
 | Apply model | ✅ `model` (TOML) | ✅ `model` (JSON) | ✅ `model.name` | ✅ `model` (blocked if both `opencode.json` and `.jsonc` exist) |
 | Provider routing (agent's own login) | OpenAI | Anthropic | Google | Anthropic, OpenAI, Google |
 | Read MCP servers | ✅ | ✅ | ✅ | ✅ |
-| Enable/disable, add remote, remove Nexus-added MCP | ✅ | — (Claude owns `~/.claude.json`) | ✅ | ✅ |
+| Enable/disable, add remote, add reviewed local, remove Nexus-added MCP | ✅ | — (Claude owns `~/.claude.json`) | ✅ | ✅ |
 | Skills | Read | Read | Read | Read |
 | Install | npm, Homebrew | Homebrew, npm | npm, Homebrew | npm |
 | Update | npm, Homebrew | npm, Homebrew, `claude update` | npm, Homebrew | npm |
@@ -140,7 +140,7 @@ Full evidence, sources and dates: [backend implementation record](docs/BACKEND_I
 
 ## How changes stay safe
 
-1. **Typed request.** The UI can only ask for one of nine registered actions; inputs are validated in Rust and unknown fields are rejected.
+1. **Typed request.** The UI can only ask for one of ten registered actions; inputs are validated in Rust and unknown fields are rejected.
 2. **Immutable plan.** Rust computes the exact change, bound to a fingerprint of the current file, a digest, and a 10-minute expiry. A plan can be used once.
 3. **Native confirmation.** The OS dialog is created by Rust from the plan; there is no “confirmed: true” the web view could forge.
 4. **Protected backup.** Before an existing file is changed, an exact copy is encrypted (AES-256-GCM, key in the Keychain) and verified.
@@ -152,7 +152,7 @@ Secrets live only in the macOS Keychain. They are never stored in the database, 
 
 ## Install
 
-Download the pre-release from [Releases](https://github.com/Sun-sh902/Project-Nexus/releases) (Apple Silicon DMG) and check its SHA-256 against the attached `.sha256` file.
+Download the pre-release from [Releases](https://github.com/Sun-sh902/Nexus/releases) (Apple Silicon DMG) and check its SHA-256 against the attached `.sha256` file.
 
 The build is ad-hoc signed and **not notarized**, so macOS blocks the first launch. After reviewing the source, Control-click the app and choose **Open**. Do not use pre-release builds where you cannot accept that risk.
 
@@ -185,7 +185,7 @@ A single Tauri 2 desktop app: a React + TypeScript UI and a Rust backend in `src
 | `models.rs`, `store.rs` | Providers, Models, Profiles, assignments; SQLite with versioned migrations |
 | `secrets.rs`, `backup.rs` | Keychain-only secrets; encrypted backups |
 | `platform/` | Bounded file reads, atomic writes, the single shell-free process runner |
-| `ipc.rs` | 14 typed commands, each allowlisted for the main window only |
+| `ipc.rs` | 18 typed domain commands (plus metadata and preferences), each allowlisted for the main window only |
 
 The UI keeps all copy in `src/locales/en-US` and reads data through one provider (`src/app/nexus-data.tsx`). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -204,11 +204,10 @@ The Rust scenario tests build throwaway home directories with fake agents and a 
 
 ## Known limitations
 
-- **Windows**: implemented but not built or validated; Windows npm recipes are inactive.
+- **Windows**: CI builds and tests Rust + frontend on Windows, but interactive Windows desktop runtime validation (`.cmd` shims, ACL mutation checks) is still open; Windows npm recipes remain inactive until validated.
 - **No online checks**: Provider reachability, credential validity and remote model lists are not checked.
-- **Custom endpoints** can be stored but not assigned to agents, because no supported agent can receive a key without writing it in plain text.
-- **Skills** are read-only. Nexus does not add local-process (stdio) MCP servers or edit Claude Code's MCP servers.
-- Removing a JSONC entry can drop an adjacent comment line.
+- **Custom endpoints** can be stored (HTTPS or loopback HTTP) with secrets in Keychain, but cannot be assigned to agents because no supported agent can receive a key without writing it in plain text.
+- **Skills** are read-only, and Nexus does not edit Claude Code's MCP servers (`~/.claude.json`). Local stdio MCP creation is intentionally restricted to compiled, reviewed reference recipes.
 - The pre-release DMG is not notarized.
 
 ## Documentation

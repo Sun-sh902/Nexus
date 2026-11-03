@@ -37,7 +37,7 @@ function PlanSheet({ flow, plan }: { flow: ActionFlow; plan: PlanView }) {
     <header className="sheet-head"><h3 id={id} className="sheet-title">{t(`kind.${plan.kind}`)}</h3><span className="kicker">{t('previewKicker', { time: formatTimestamp(plan.expiresAt, locale) })}</span></header>
     <div className="sheet-body">
       <InfoList items={rows} />
-      {plan.config && plan.config.changes.length > 0 && <ul className="plan-changes">{plan.config.changes.map(change => <li key={change.key}><span className="mono">{change.key}</span><span className="mono is-empty">{change.before ?? t('absent')}</span><span aria-hidden="true">{'→'}</span><span className="mono">{change.after ?? t('removed')}</span></li>)}</ul>}
+      {plan.config && plan.config.changes.length > 0 && <ul className="plan-changes">{plan.config.changes.map(change => <li key={change.key}><span className="mono">{change.key}</span>{(change.before !== null || change.after !== null) && <><span className="mono is-empty">{change.before ?? t('absent')}</span><span aria-hidden="true">{'→'}</span><span className="mono">{change.after ?? t('removed')}</span></>}</li>)}</ul>}
       {plan.config && plan.config.diff.length > 0 && <pre className="plan-diff mono" aria-label={t('diffLabel')}>{plan.config.diff.map(line => `${line.kind} ${line.text}`).join('\n')}</pre>}
       {plan.config?.createsFile && <Notice>{t('createsFile')}</Notice>}
       {plan.warnings.map(w => <Notice key={w} tone="attention">{t(w)}</Notice>)}

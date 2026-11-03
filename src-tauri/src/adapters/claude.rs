@@ -321,6 +321,11 @@ impl AgentAdapter for Claude {
                 Support::Unsupported,
                 Some("capability.claudeMcpAgentOwned"),
             ),
+            cap(
+                "mcp.addReviewed",
+                Support::Unsupported,
+                Some("capability.claudeMcpAgentOwned"),
+            ),
             cap("skills.read", level, None),
             cap(
                 "skills.write",
