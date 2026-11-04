@@ -920,7 +920,7 @@ impl App {
         Ok(())
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub fn force_plan_expiry(&self, plan_id: &str, expires_at: Instant) -> String {
         let mut guard = self.plans.lock().unwrap();
         let plan = guard.get_mut(plan_id).unwrap();

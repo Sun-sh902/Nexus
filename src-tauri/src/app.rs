@@ -906,7 +906,7 @@ impl App {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub mod test_support {
     use super::*;
     use crate::secrets::MemorySecretStore;

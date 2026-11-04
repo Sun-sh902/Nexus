@@ -495,11 +495,17 @@ mod tests {
             node_dir: Some(PathBuf::from("/usr/bin")),
             brew: None,
         };
-        let prefix = npm_prefix_of(std::path::Path::new(
-            "/Users/x/.nvm/versions/node/v18/lib/node_modules/@google/gemini-cli/bundle/gemini.js",
-        ))
-        .unwrap();
-        assert_eq!(prefix, PathBuf::from("/Users/x/.nvm/versions/node/v18"));
+        let root = dir.path().join("nvm").join("v18");
+        let entry = root
+            .join("lib")
+            .join("node_modules")
+            .join("@google")
+            .join("gemini-cli")
+            .join("bundle")
+            .join("gemini.js");
+        let prefix = npm_prefix_of(&entry).unwrap();
+        assert_eq!(prefix, root);
+        let expected_prefix = prefix.to_string_lossy().to_string();
         let spec =
             build_spec(&ctx, &tools, &NPM, Op::Uninstall, None, None, Some(&prefix)).unwrap();
         assert_eq!(
@@ -508,7 +514,7 @@ mod tests {
                 "uninstall",
                 "--global",
                 "--prefix",
-                "/Users/x/.nvm/versions/node/v18",
+                expected_prefix.as_str(),
                 "@google/gemini-cli"
             ]
         );
@@ -518,7 +524,7 @@ mod tests {
                 .code,
             "lifecycle.prefix_unknown"
         );
-        assert!(npm_prefix_of(std::path::Path::new("/opt/homebrew/bin/codex")).is_none());
+        assert!(npm_prefix_of(&dir.path().join("bin").join("codex")).is_none());
     }
 
     #[test]
