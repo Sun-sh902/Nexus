@@ -542,7 +542,15 @@ mod tests {
 
     #[test]
     fn local_command_arrays_are_observed_by_basename_only() {
-        let (_d, ctx) = setup(Some("{\"mcp\": {\"fs\": {\"type\": \"local\", \"command\": [\"/opt/tools/mcp-fs\", \"--token\", \"sk-abcdefghijklmnopqrstuvwxyz0123\"], \"environment\": {\"KEY\": \"v\"}}}}"), None);
+        let missing_cmd = if cfg!(windows) {
+            "C:/opt/nonexistent-nexus-tools/mcp-fs"
+        } else {
+            "/opt/nonexistent-nexus-tools/mcp-fs"
+        };
+        let raw = format!(
+            "{{\"mcp\": {{\"fs\": {{\"type\": \"local\", \"command\": [\"{missing_cmd}\", \"--token\", \"sk-abcdefghijklmnopqrstuvwxyz0123\"], \"environment\": {{\"KEY\": \"v\"}}}}}}}}"
+        );
+        let (_d, ctx) = setup(Some(&raw), None);
         let configs = OpenCode.read_configs(&ctx);
         let ext = OpenCode.observe_extensions(&ctx, &configs);
         assert_eq!(ext.mcp[0].command.as_deref(), Some("mcp-fs"));

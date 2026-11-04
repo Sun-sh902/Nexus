@@ -517,7 +517,15 @@ mod tests {
 
     #[test]
     fn model_and_mcp_observation() {
-        let (_d, ctx) = ctx_with(Some("model = \"gpt-x\"\n[mcp_servers.docs]\nurl = \"https://mcp.example.com/a?token=SECRET\"\n[mcp_servers.local]\ncommand = \"/nonexistent/bin/server\"\nargs = [\"--key\", \"sk-abcdefghijklmnopqrstuvwxyz123456\"]\nenabled = false\n"));
+        let missing_cmd = if cfg!(windows) {
+            "C:/nonexistent-nexus-test/bin/server"
+        } else {
+            "/nonexistent-nexus-test/bin/server"
+        };
+        let raw = format!(
+            "model = \"gpt-x\"\n[mcp_servers.docs]\nurl = \"https://mcp.example.com/a?token=SECRET\"\n[mcp_servers.local]\ncommand = \"{missing_cmd}\"\nargs = [\"--key\", \"sk-abcdefghijklmnopqrstuvwxyz123456\"]\nenabled = false\n"
+        );
+        let (_d, ctx) = ctx_with(Some(&raw));
         let configs = Codex.read_configs(&ctx);
         let model = Codex.observe_model(&ctx, &configs);
         assert_eq!(model.effective.as_deref(), Some("gpt-x"));
