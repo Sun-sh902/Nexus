@@ -27,6 +27,10 @@ fn main() {
             "nexus_delete_workspace",
             "nexus_launch_workspace",
             "nexus_consult_ai_doctor",
+            "nexus_list_sessions",
+            "nexus_resume_session",
+            "nexus_delete_session",
+            "nexus_usage_insights",
         ]),
     ))
     .expect("Tauri build configuration must be valid");

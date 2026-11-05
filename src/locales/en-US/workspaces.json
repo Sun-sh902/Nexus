@@ -28,5 +28,9 @@
   "activeAgentLabel": "Active Agent:",
   "primaryAgentPrefix": "Primary: {{agent}}",
   "fallbackBadge": "(Fallback)",
-  "deleteConfirm": "Are you sure you want to remove workspace \"{{name}}\"? This only removes Nexus management and will not delete project files."
+  "deleteConfirm": "Are you sure you want to remove workspace \"{{name}}\"? This only removes Nexus management and will not delete project files.",
+  "sessionsToggle": "Sessions ({{count}})",
+  "hideSessions": "Hide Sessions",
+  "usageToggle": "Usage & Cost Insights",
+  "hideUsage": "Hide Usage"
 }

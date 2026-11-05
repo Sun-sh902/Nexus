@@ -125,6 +125,68 @@ export interface AiDoctorConsultation {
   redactionNotice: string;
   disclaimer: string;
 }
+
+export interface SessionSummary {
+  id: string;
+  agentId: AgentId;
+  workspaceId?: string;
+  externalSessionId: string;
+  title: string;
+  projectPath: string;
+  displayPath: string;
+  startedAt: string;
+  lastActiveAt: string;
+  messageCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostCents: number;
+  estimatedCostUsd: string;
+  costProvenance: string;
+  modelIdentifier?: string;
+  canResume: boolean;
+  resumeCommandPreview: string;
+}
+
+export interface AgentUsageBreakdown {
+  agentId: AgentId;
+  sessionCount: number;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostUsd: string;
+  percentageOfTotal: number;
+}
+
+export interface ModelUsageBreakdown {
+  modelIdentifier: string;
+  sessionCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: string;
+  isEstimated: boolean;
+}
+
+export interface WorkspaceUsageBreakdown {
+  workspaceId: string;
+  workspaceName: string;
+  sessionCount: number;
+  totalTokens: number;
+  estimatedCostUsd: string;
+}
+
+export interface UsageInsights {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
+  totalEstimatedCostUsd: string;
+  totalSessionsCount: number;
+  byAgent: AgentUsageBreakdown[];
+  byModel: ModelUsageBreakdown[];
+  byWorkspace: WorkspaceUsageBreakdown[];
+  provenanceNotes: string[];
+}
 export interface ConfigEdit { targetId: string; location: string; format: string; createsFile: boolean; beforeFingerprint: string | null; afterFingerprint: string; changes: { key: string; before: string | null; after: string | null }[]; diff: { kind: '+' | '-'; text: string }[] }
 export interface PlanView {
   id: string; digest: string; kind: string; agentId: AgentId | null; createdAt: string; expiresAt: string; params: Pairs;
@@ -203,4 +265,8 @@ export const backend = {
   deleteWorkspace: (workspaceId: string) => call<void>('nexus_delete_workspace', { workspaceId }),
   launchWorkspace: (workspaceId: string) => call<string>('nexus_launch_workspace', { workspaceId }),
   consultAiDoctor: (agentId: AgentId) => call<AiDoctorConsultation>('nexus_consult_ai_doctor', { agentId }),
+  listSessions: (workspaceId?: string, agentId?: AgentId, limit?: number) => call<SessionSummary[]>('nexus_list_sessions', { workspaceId: workspaceId ?? null, agentId: agentId ?? null, limit: limit ?? null }),
+  resumeSession: (sessionId: string) => call<string>('nexus_resume_session', { sessionId }),
+  deleteSession: (sessionId: string) => call<void>('nexus_delete_session', { sessionId }),
+  getUsageInsights: (workspaceId?: string, agentId?: AgentId) => call<UsageInsights>('nexus_usage_insights', { workspaceId: workspaceId ?? null, agentId: agentId ?? null }),
 };

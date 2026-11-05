@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Folder, GitBranch, Terminal, Trash2, Plus, FileCode2 } from 'lucide-react';
+import { Folder, GitBranch, Terminal, Trash2, Plus, FileCode2, Clock, BarChart3 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNexus } from '../app/nexus-context';
 import type { AgentId } from '../app/backend';
 import { Section, Status, Notice } from './ui';
+import { SessionContinuity } from './SessionContinuity';
+import { UsageInsightsPanel } from './UsageInsightsPanel';
 
 const AGENTS: { id: AgentId; name: string }[] = [
   { id: 'claude', name: 'Claude Code' },
@@ -14,8 +16,10 @@ const AGENTS: { id: AgentId; name: string }[] = [
 
 export function WorkspaceSection() {
   const { t } = useTranslation(['workspaces', 'common', 'errors']);
-  const { workspaces, createWorkspace, deleteWorkspace, launchWorkspace } = useNexus();
+  const { workspaces, sessions, createWorkspace, deleteWorkspace, launchWorkspace } = useNexus();
   const [adding, setAdding] = useState(false);
+  const [showUsage, setShowUsage] = useState(false);
+  const [expandedWsId, setExpandedWsId] = useState<string | null>(null);
   const [path, setPath] = useState('');
   const [name, setName] = useState('');
   const [primaryAgent, setPrimaryAgent] = useState<AgentId>('claude');
@@ -81,18 +85,30 @@ export function WorkspaceSection() {
       title={t('title')}
       className="home-workspaces"
       aside={
-        <button
-          type="button"
-          className="button button-small"
-          onClick={() => { setAdding(prev => !prev); setErrorMsg(null); }}
-        >
-          <Plus size={13} aria-hidden="true" />
-          <span>{adding ? t('cancel') : t('addWorkspace')}</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            className="button button-small"
+            onClick={() => setShowUsage(prev => !prev)}
+            aria-pressed={showUsage}
+          >
+            <BarChart3 size={13} aria-hidden="true" />
+            <span>{showUsage ? t('hideUsage') : t('usageToggle')}</span>
+          </button>
+          <button
+            type="button"
+            className="button button-small"
+            onClick={() => { setAdding(prev => !prev); setErrorMsg(null); }}
+          >
+            <Plus size={13} aria-hidden="true" />
+            <span>{adding ? t('cancel') : t('addWorkspace')}</span>
+          </button>
+        </div>
       }
     >
       {errorMsg && <Notice tone="attention">{errorMsg}</Notice>}
       {launchMsg && <Notice tone="success">{launchMsg}</Notice>}
+      {showUsage && <UsageInsightsPanel />}
 
       {adding && (
         <form onSubmit={handleCreate} className="add-workspace-card">
@@ -229,6 +245,19 @@ export function WorkspaceSection() {
                 <div className="workspace-actions">
                   <button
                     type="button"
+                    className="button button-small"
+                    onClick={() => setExpandedWsId(prev => prev === ws.id ? null : ws.id)}
+                    aria-expanded={expandedWsId === ws.id}
+                  >
+                    <Clock size={12} aria-hidden="true" />
+                    <span>
+                      {expandedWsId === ws.id
+                        ? t('hideSessions')
+                        : t('sessionsToggle', { count: sessions.filter(s => s.workspaceId === ws.id).length })}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
                     className="button button-small button-primary"
                     disabled={launchingId === ws.id || ws.readiness === 'blocked'}
                     onClick={() => handleLaunch(ws.id, ws.name)}
@@ -247,6 +276,11 @@ export function WorkspaceSection() {
                     <Trash2 size={14} aria-hidden="true" />
                   </button>
                 </div>
+                {expandedWsId === ws.id && (
+                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
+                    <SessionContinuity workspaceId={ws.id} compact />
+                  </div>
+                )}
               </div>
             );
           })}

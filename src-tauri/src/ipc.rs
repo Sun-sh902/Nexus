@@ -392,6 +392,66 @@ pub async fn nexus_consult_ai_doctor(
         .map_err(|_| NexusError::new("app.task_failed"))?
 }
 
+#[tauri::command]
+pub async fn nexus_list_sessions(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    workspace_id: Option<String>,
+    agent_id: Option<AgentId>,
+    limit: Option<usize>,
+) -> NexusResult<Vec<crate::sessions::SessionSummary>> {
+    main_window(&window)?;
+    if let Some(ref w) = workspace_id {
+        bounded(w, 64)?;
+    }
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.list_sessions(workspace_id, agent_id, limit))
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
+}
+
+#[tauri::command]
+pub async fn nexus_resume_session(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> NexusResult<String> {
+    main_window(&window)?;
+    bounded(&session_id, 64)?;
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.resume_session(&session_id))
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
+}
+
+#[tauri::command]
+pub fn nexus_delete_session(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> NexusResult<()> {
+    main_window(&window)?;
+    bounded(&session_id, 64)?;
+    state.delete_session(&session_id)
+}
+
+#[tauri::command]
+pub async fn nexus_usage_insights(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    workspace_id: Option<String>,
+    agent_id: Option<AgentId>,
+) -> NexusResult<crate::usage_insights::UsageInsights> {
+    main_window(&window)?;
+    if let Some(ref w) = workspace_id {
+        bounded(w, 64)?;
+    }
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.usage_insights(workspace_id, agent_id))
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
+}
+
 #[cfg(test)]
 pub const COMMANDS: &[&str] = &[
     "nexus_overview",
@@ -418,6 +478,10 @@ pub const COMMANDS: &[&str] = &[
     "nexus_delete_workspace",
     "nexus_launch_workspace",
     "nexus_consult_ai_doctor",
+    "nexus_list_sessions",
+    "nexus_resume_session",
+    "nexus_delete_session",
+    "nexus_usage_insights",
 ];
 
 #[cfg(test)]

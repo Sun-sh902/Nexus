@@ -1,6 +1,6 @@
 # Backend implementation progress (Phases 2–7 core backend)
 
-Status date: 2026-11-05. Version `0.5.0` (`v0.5.0`). This is the resumable record for the
+Status date: 2026-11-05. Version `0.6.0` (`v0.6.0`). This is the resumable record for the
 Core Backend Beta Candidate program. It records what exists and what was verified; it does not
 claim anything that was not executed. Product authority remains [PRD](PRD.md); sequencing remains
 [ROADMAP](ROADMAP.md).
@@ -19,6 +19,8 @@ claim anything that was not executed. Product authority remains [PRD](PRD.md); s
 | H — Frontend integration | Done: every page reads Rust data in the desktop app; fixtures only in explicit browser demo mode |
 | I — Validation / review | Automated suites green; real desktop app launched with live data; independent review — see §Independent review |
 | J — Phase 8 Workspaces | Implemented: local project path identity, instruction parsing, context-aware readiness, safe terminal launcher, SQLite migration #2 |
+| K — Phase 9 AI Doctor | Implemented: local expert reasoning, privacy redaction, 7-stage radar, 1-click safe repairs |
+| L — Phase 10 Session Continuity & Insights | Implemented: session discovery, safe resume, offline token/cost insights, SQLite migration #3 |
 
 ## Repository recovery (Gate A)
 
@@ -249,6 +251,19 @@ Breakthrough release delivering Phase 9 AI Doctor and 7-Stage Visual Health Rada
 - **Interactive AI Doctor Panel (`AiDoctorPanel.tsx`)**: embedded on the Agent Detail Diagnostics tab with live scanning animation, health state badges, root-cause breakdowns, and 1-click repair actions.
 - **Verification (2026-11-05, macOS arm64)**: `cargo test --locked` → **149 passed, 0 failed, 3 ignored**; `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint` → 0 errors; `pnpm test` (Vitest) → 17 passed; `pnpm test:ui` (Playwright + `axe`) → 33 passed; `pnpm build` → pass.
 
+## Phase 10 Session Continuity & Contextual Usage Insights Delivery (`0.6.0`, 2026-11-05)
+
+Major milestone delivering Phase 10 Session Continuity and Contextual Usage & Cost Insights:
+- **Session Continuity Engine (`sessions.rs`)**: Version-qualified discovery, indexing, and 1-click resumption for local Agent sessions across Claude Code, OpenAI Codex, Gemini CLI, and OpenCode.
+- **Safe Terminal Session Resume (`nexus_resume_session`)**: Verified binary executable checks, strictly pinned working directory to project path, and native OS terminal launcher with audit logging in SQLite operations.
+- **Contextual Usage & Cost Insights (`usage_insights.rs`)**: Offline, deterministic token usage aggregation and reference cost computation across Workspaces, Agents, and Models with full provenance disclosure.
+- **Official Model Pricing Matrix**: Reference pricing schedules (input/output cents per 1M tokens) for Claude 3.5 Sonnet, Claude 3.5 Haiku, Claude 3 Opus, GPT-4o, GPT-4o mini, o1-preview, o1-mini, Gemini 1.5 Pro, and Gemini 1.5 Flash. Unrecognized or local models are explicitly labeled as unknown/unpriced.
+- **SQLite Database Migration #3 (`agent_sessions`)**: Created indexed `agent_sessions` table with unique constraint on `(agent_id, external_session_id)`, tracking message count, input units, output units, estimated costs, and last active timestamps.
+- **Workspace-Detached Session Retention**: Deleting a workspace nullifies references without destroying historical session records; users retain full privacy control to remove individual session references at any time (`nexus_delete_session`).
+- **Interactive Session Continuity UI (`SessionContinuity.tsx`)**: High-fidelity session cards embedded in Workspaces with token count, message count, cost badge, and 1-click terminal resume.
+- **Interactive Contextual Usage Panel (`UsageInsightsPanel.tsx`)**: Statistical summary cards, Agent token distribution bars, Model breakdown tables, and privacy guarantee disclosures.
+- **Verification (2026-11-05, macOS arm64)**: `cargo test --locked` → **154 passed, 0 failed, 3 ignored**; `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint` → 0 errors; `pnpm test` (Vitest) → 20 passed; `pnpm build` → pass.
+
 ## Continuation point
 
-Phase 9 AI Doctor delivered in version 0.5.0. Next canonical roadmap phase is Phase 10 Session Continuity & contextual usage/cost insights.
+Phase 10 Session Continuity and Contextual Usage Insights delivered in version 0.6.0. Next canonical roadmap phase is Phase 11 Accounts + cloud sync + Pro.

@@ -16,7 +16,9 @@ import errorsEn from '../locales/en-US/errors.json' with { type: 'json' };
 import capabilityEn from '../locales/en-US/capability.json' with { type: 'json' };
 import workspacesEn from '../locales/en-US/workspaces.json' with { type: 'json' };
 import aiDoctorEn from '../locales/en-US/ai_doctor.json' with { type: 'json' };
+import sessionsEn from '../locales/en-US/sessions.json' with { type: 'json' };
+import usageEn from '../locales/en-US/usage.json' with { type: 'json' };
 
 export const resources = {
-  'en-US': { common: commonEn, navigation: navigationEn, health: healthEn, home: homeEn, agents: agentsEn, models: modelsEn, providers: providersEn, extensions: extensionsEn, system: systemEn, settings: settingsEn, diagnostics: diagnosticsEn, checks: checksEn, findings: findingsEn, actions: actionsEn, errors: errorsEn, capability: capabilityEn, workspaces: workspacesEn, aiDoctor: aiDoctorEn },
+  'en-US': { common: commonEn, navigation: navigationEn, health: healthEn, home: homeEn, agents: agentsEn, models: modelsEn, providers: providersEn, extensions: extensionsEn, system: systemEn, settings: settingsEn, diagnostics: diagnosticsEn, checks: checksEn, findings: findingsEn, actions: actionsEn, errors: errorsEn, capability: capabilityEn, workspaces: workspacesEn, aiDoctor: aiDoctorEn, sessions: sessionsEn, usage: usageEn },
 };

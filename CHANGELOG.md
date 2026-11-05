@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0 — 2026-11-05 (Breakthrough: Phase 10 Session Continuity & Contextual Usage Insights)
+
+Major breakthrough milestone delivering **Phase 10: Session Continuity & Contextual Usage/Cost Insights**, empowering developers to resume in-flight project conversations directly and understand their LLM resource investment with transparent mathematical accounting and 100% offline privacy guarantees.
+
+### Added
+- **Session Continuity Engine (`sessions.rs`)**: Version-qualified discovery, indexing, and one-click resumption for local Agent sessions across Claude Code, OpenAI Codex, Gemini CLI, and OpenCode.
+- **Safe Terminal Session Resume (`nexus_resume_session`)**: Verified binary executable checks, strictly pinned working directory to project path, and native OS terminal launcher with audit logging in SQLite operations.
+- **Contextual Usage & Cost Insights (`usage_insights.rs`)**: Offline, deterministic token usage aggregation and reference cost computation across Workspaces, Agents, and Models with full provenance disclosure.
+- **Official Model Pricing Matrix**: Reference pricing schedules (input/output cents per 1M tokens) for Claude 3.5 Sonnet, Claude 3.5 Haiku, Claude 3 Opus, GPT-4o, GPT-4o mini, o1-preview, o1-mini, Gemini 1.5 Pro, and Gemini 1.5 Flash. Unrecognized or local models are explicitly labeled as unknown/unpriced.
+- **SQLite Database Migration #3 (`agent_sessions`)**: Created indexed `agent_sessions` table with unique constraint on `(agent_id, external_session_id)`, tracking message count, input units, output units, estimated costs, and last active timestamps.
+- **Workspace-Detached Session Retention**: Deleting a workspace nullifies references without destroying historical session records; users retain full privacy control to remove individual session references at any time (`nexus_delete_session`).
+- **Interactive Session Continuity UI (`SessionContinuity.tsx`)**: High-fidelity session cards embedded in Workspaces with token count, message count, cost badge, and 1-click terminal resume.
+- **Interactive Contextual Usage Panel (`UsageInsightsPanel.tsx`)**: Statistical summary cards, Agent token distribution bars, Model breakdown tables, and privacy guarantee disclosures.
+- **Typed IPC Allowlist**: Registered `nexus_list_sessions`, `nexus_resume_session`, `nexus_delete_session`, and `nexus_usage_insights` across Tauri capabilities, build manifests, and contract test suites.
+
 ## 0.5.0 — 2026-11-05 (Breakthrough: Phase 9 AI Doctor & Visual Health Radar)
 
 Major breakthrough release delivering Phase 9 AI Doctor and the 7-Stage Visual Health Radar, transforming Project Nexus into an intelligent, privacy-preserving self-healing lifecycle copilot.

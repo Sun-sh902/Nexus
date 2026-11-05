@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { backend, liveBackend, NexusError, type AgentId, type CreateWorkspaceRequest, type ModelsView, type Overview, type WorkspaceView } from './backend';
+import { backend, liveBackend, NexusError, type AgentId, type CreateWorkspaceRequest, type ModelsView, type Overview, type SessionSummary, type UsageInsights, type WorkspaceView } from './backend';
 import { agentView, activityViews, toolViews } from '../data/live';
-import { demoActivity, demoAgents, demoAiDoctor, demoExtensions, demoTools, demoWorkspaces } from '../data/demo';
+import { demoActivity, demoAgents, demoAiDoctor, demoExtensions, demoSessions, demoTools, demoUsageInsights, demoWorkspaces } from '../data/demo';
 import { NexusContext, type DataMode, type NexusData } from './nexus-context';
 
 // Single data boundary for pages. Inside the desktop runtime every value comes from Rust; the
@@ -14,6 +14,8 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
   const [models, setModels] = useState<ModelsView | null>(null);
   const [modelsError, setModelsError] = useState<NexusError | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceView[]>(mode === 'demo' ? demoWorkspaces() : []);
+  const [sessions, setSessions] = useState<SessionSummary[]>(mode === 'demo' ? demoSessions() : []);
+  const [usageInsights, setUsageInsights] = useState<UsageInsights | null>(mode === 'demo' ? demoUsageInsights() : null);
   const [status, setStatus] = useState<NexusData['status']>(mode === 'live' ? 'loading' : 'ready');
   const [error, setError] = useState<NexusError | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -23,6 +25,24 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     if (mode !== 'live') return;
     try {
       setWorkspaces(await backend.listWorkspaces());
+    } catch {
+      // non-fatal
+    }
+  }, [mode]);
+
+  const reloadSessions = useCallback(async (workspaceId?: string, agentId?: AgentId) => {
+    if (mode !== 'live') return;
+    try {
+      setSessions(await backend.listSessions(workspaceId, agentId));
+    } catch {
+      // non-fatal
+    }
+  }, [mode]);
+
+  const reloadUsageInsights = useCallback(async (workspaceId?: string, agentId?: AgentId) => {
+    if (mode !== 'live') return;
+    try {
+      setUsageInsights(await backend.getUsageInsights(workspaceId, agentId));
     } catch {
       // non-fatal
     }
@@ -40,6 +60,8 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       setStatus('ready');
       setError(null);
       void reloadWorkspaces();
+      void reloadSessions();
+      void reloadUsageInsights();
     } catch (caught) {
       if (mine !== generation.current) return;
       setError(caught instanceof NexusError ? caught : new NexusError({ code: 'ipc.unavailable', params: [], retryable: true }));
@@ -47,7 +69,7 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     } finally {
       if (mine === generation.current) setRefreshing(false);
     }
-  }, [mode, reloadWorkspaces]);
+  }, [mode, reloadWorkspaces, reloadSessions, reloadUsageInsights]);
 
   const reloadModels = useCallback(async () => {
     if (mode !== 'live') return;
@@ -104,6 +126,25 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     return demoAiDoctor(agentId);
   }, [mode]);
 
+  const resumeSession = useCallback(async (id: string) => {
+    if (mode === 'live') {
+      const res = await backend.resumeSession(id);
+      await reloadSessions();
+      return res;
+    }
+    return `op_mock_resume_${id}`;
+  }, [mode, reloadSessions]);
+
+  const deleteSession = useCallback(async (id: string) => {
+    if (mode === 'live') {
+      await backend.deleteSession(id);
+      await reloadSessions();
+      await reloadUsageInsights();
+    } else {
+      setSessions(prev => prev.filter(s => s.id !== id));
+    }
+  }, [mode, reloadSessions, reloadUsageInsights]);
+
   // Deferred so the scan's state updates never run synchronously inside the effect body.
   useEffect(() => { void Promise.resolve().then(() => load(true)); }, [load]);
 
@@ -126,6 +167,8 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       tools: mode === 'demo' ? demoTools() : overview ? toolViews(overview) : [],
       activity: mode === 'demo' ? demoActivity() : overview ? activityViews(overview) : [],
       workspaces,
+      sessions,
+      usageInsights,
       scannedAt: mode === 'demo' ? '2026-10-07T02:30:00Z' : overview?.generatedAt ?? null,
       refreshing,
       refresh: () => load(true),
@@ -135,9 +178,13 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       deleteWorkspace,
       launchWorkspace,
       consultAiDoctor,
+      reloadSessions,
+      resumeSession,
+      deleteSession,
+      reloadUsageInsights,
       findAgent: (id: string) => agents.find(agent => agent.id === id),
     };
-  }, [mode, status, error, overview, workspaces, refreshing, load, models, modelsError, reloadModels, reloadWorkspaces, createWorkspace, deleteWorkspace, launchWorkspace, consultAiDoctor]);
+  }, [mode, status, error, overview, workspaces, sessions, usageInsights, refreshing, load, models, modelsError, reloadModels, reloadWorkspaces, createWorkspace, deleteWorkspace, launchWorkspace, consultAiDoctor, reloadSessions, resumeSession, deleteSession, reloadUsageInsights]);
   return <NexusContext.Provider value={value}>{children}</NexusContext.Provider>;
 }
 

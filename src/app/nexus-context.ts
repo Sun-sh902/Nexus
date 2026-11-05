@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AgentId, AiDoctorConsultation, CreateWorkspaceRequest, ModelsView, NexusError, Overview, WorkspaceView } from './backend';
+import type { AgentId, AiDoctorConsultation, CreateWorkspaceRequest, ModelsView, NexusError, Overview, SessionSummary, UsageInsights, WorkspaceView } from './backend';
 import type { ActivityView, AgentView, ExtensionView, Text, ToolView } from '../data/view';
 
 export type DataMode = 'live' | 'demo';
@@ -14,6 +14,8 @@ export interface NexusData {
   tools: ToolView[];
   activity: ActivityView[];
   workspaces: WorkspaceView[];
+  sessions: SessionSummary[];
+  usageInsights: UsageInsights | null;
   scannedAt: string | null;
   refreshing: boolean;
   refresh: () => Promise<void>;
@@ -25,6 +27,10 @@ export interface NexusData {
   deleteWorkspace: (id: string) => Promise<void>;
   launchWorkspace: (id: string) => Promise<string>;
   consultAiDoctor: (agentId: AgentId) => Promise<AiDoctorConsultation>;
+  reloadSessions: (workspaceId?: string, agentId?: AgentId) => Promise<void>;
+  resumeSession: (id: string) => Promise<string>;
+  deleteSession: (id: string) => Promise<void>;
+  reloadUsageInsights: (workspaceId?: string, agentId?: AgentId) => Promise<void>;
   findAgent: (id: string) => AgentView | undefined;
 }
 

@@ -1034,6 +1034,114 @@ impl App {
             },
         ))
     }
+
+    // ---- Session Continuity & Usage Insights (Phase 10) -------------------------------------
+
+    pub fn list_sessions(
+        &self,
+        workspace_id: Option<String>,
+        agent_id: Option<AgentId>,
+        limit: Option<usize>,
+    ) -> NexusResult<Vec<crate::sessions::SessionSummary>> {
+        let store = self.store()?;
+        if let Some(ref wid) = workspace_id {
+            if let Ok(Some(ws)) = store.get_workspace(wid) {
+                let p = std::path::PathBuf::from(&ws.path);
+                let primary = AgentId::parse(&ws.primary_agent).unwrap_or(AgentId::Claude);
+                let markers = crate::sessions::scan_project_session_markers(
+                    &self.ctx,
+                    &p,
+                    primary,
+                    wid,
+                    Instant::now(),
+                );
+                for m in markers {
+                    let _ = store.insert_or_update_session(&m);
+                }
+            }
+        }
+        let records = store.sessions(workspace_id.as_deref(), agent_id, limit.unwrap_or(50))?;
+        let summaries = records
+            .iter()
+            .map(|r| crate::sessions::to_session_summary(&self.ctx, r))
+            .collect();
+        Ok(summaries)
+    }
+
+    pub fn resume_session(&self, session_id: &str) -> NexusResult<String> {
+        let store = self.store()?;
+        let record = store
+            .get_session(session_id)?
+            .ok_or_else(|| NexusError::new("session.not_found"))?;
+
+        let proj_path = std::path::PathBuf::from(&record.project_path);
+        let aid = AgentId::parse(&record.agent_id).unwrap_or(AgentId::Claude);
+        let spec = crate::sessions::build_resume_spec(
+            &self.ctx,
+            &proj_path,
+            aid,
+            &record.external_session_id,
+        )?;
+
+        // Update last_active_at
+        let mut updated = record.clone();
+        updated.last_active_at = Instant::now().to_rfc3339();
+        let _ = store.insert_or_update_session(&updated);
+
+        // Record operation in SQLite
+        let now = Instant::now();
+        let op_id = crate::core::new_id("op");
+        store.begin_operation(
+            &op_id,
+            "resume_session",
+            Some(aid),
+            "resume_session",
+            &serde_json::json!({
+                "sessionId": session_id,
+                "title": record.title,
+                "projectPath": record.project_path,
+            }),
+            now,
+        )?;
+
+        let out = crate::platform::process::run(&spec)
+            .map_err(|_| NexusError::new("lifecycle.launch_failed"))?;
+        let status = if out.success() { "succeeded" } else { "failed" };
+        let _ = store.finish_operation(
+            &op_id,
+            status,
+            if out.success() {
+                None
+            } else {
+                Some("exit_nonzero")
+            },
+            Instant::now(),
+        );
+
+        Ok(format!(
+            "Resumed session {} for {}",
+            session_id, record.agent_id
+        ))
+    }
+
+    pub fn delete_session(&self, session_id: &str) -> NexusResult<()> {
+        let store = self.store()?;
+        store.delete_session(session_id)
+    }
+
+    pub fn usage_insights(
+        &self,
+        workspace_id: Option<String>,
+        agent_id: Option<AgentId>,
+    ) -> NexusResult<crate::usage_insights::UsageInsights> {
+        let store = self.store()?;
+        let sessions = store.sessions(workspace_id.as_deref(), agent_id, 200)?;
+        let workspaces = store.workspaces()?;
+        Ok(crate::usage_insights::compute_usage_insights(
+            &sessions,
+            &workspaces,
+        ))
+    }
 }
 
 #[cfg(all(test, unix))]

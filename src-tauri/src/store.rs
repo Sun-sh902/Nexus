@@ -10,7 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use std::path::Path;
 
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 const MIGRATIONS: &[(i64, &str)] = &[
     (
@@ -70,6 +70,32 @@ CREATE TABLE workspaces (
   updated_at TEXT NOT NULL,
   last_opened_at TEXT
 );
+"#,
+    ),
+    (
+        3,
+        r#"
+CREATE TABLE agent_sessions (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  workspace_id TEXT,
+  external_session_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  project_path TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  last_active_at TEXT NOT NULL,
+  message_count INTEGER NOT NULL DEFAULT 0,
+  input_units INTEGER NOT NULL DEFAULT 0,
+  output_units INTEGER NOT NULL DEFAULT 0,
+  estimated_cost_cents INTEGER NOT NULL DEFAULT 0,
+  cost_provenance TEXT NOT NULL,
+  model_identifier TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(agent_id, external_session_id)
+);
+CREATE INDEX idx_sessions_workspace ON agent_sessions(workspace_id);
+CREATE INDEX idx_sessions_agent ON agent_sessions(agent_id);
+CREATE INDEX idx_sessions_last_active ON agent_sessions(last_active_at);
 "#,
     ),
 ];
@@ -144,6 +170,27 @@ pub struct StoreCounts {
     pub health_row_count: i64,
     pub backup_count: i64,
     pub workspace_count: i64,
+    pub session_count: i64,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionRecord {
+    pub id: String,
+    pub agent_id: String,
+    pub workspace_id: Option<String>,
+    pub external_session_id: String,
+    pub title: String,
+    pub project_path: String,
+    pub started_at: String,
+    pub last_active_at: String,
+    pub message_count: u32,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub estimated_cost_cents: u64,
+    pub cost_provenance: String,
+    pub model_identifier: Option<String>,
+    pub created_at: String,
 }
 
 #[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -821,12 +868,17 @@ impl Store {
             .conn
             .query_row("SELECT COUNT(*) FROM workspaces", [], |r| r.get(0))
             .map_err(db_err)?;
+        let session_count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM agent_sessions", [], |r| r.get(0))
+            .unwrap_or(0);
         Ok(StoreCounts {
             operation_count,
             unresolved_count,
             health_row_count,
             backup_count,
             workspace_count,
+            session_count,
         })
     }
 
@@ -862,6 +914,10 @@ impl Store {
     }
 
     pub fn delete_workspace(&self, id: &str) -> NexusResult<()> {
+        let _ = self.conn.execute(
+            "UPDATE agent_sessions SET workspace_id = NULL WHERE workspace_id = ?1",
+            [id],
+        );
         let deleted = self
             .conn
             .execute("DELETE FROM workspaces WHERE id = ?1", [id])
@@ -940,6 +996,146 @@ impl Store {
             )
             .optional()
             .map_err(db_err)
+    }
+
+    // ---- Agent Sessions (Phase 10) ---------------------------------------------------------
+
+    pub fn insert_or_update_session(&self, s: &SessionRecord) -> NexusResult<()> {
+        self.conn
+            .execute(
+                "INSERT INTO agent_sessions (
+                    id, agent_id, workspace_id, external_session_id, title, project_path,
+                    started_at, last_active_at, message_count, input_units, output_units,
+                    estimated_cost_cents, cost_provenance, model_identifier, created_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+                 ON CONFLICT(agent_id, external_session_id) DO UPDATE SET
+                    workspace_id = COALESCE(excluded.workspace_id, agent_sessions.workspace_id),
+                    title = excluded.title,
+                    project_path = excluded.project_path,
+                    last_active_at = excluded.last_active_at,
+                    message_count = excluded.message_count,
+                    input_units = excluded.input_units,
+                    output_units = excluded.output_units,
+                    estimated_cost_cents = excluded.estimated_cost_cents,
+                    cost_provenance = excluded.cost_provenance,
+                    model_identifier = COALESCE(excluded.model_identifier, agent_sessions.model_identifier)",
+                params![
+                    s.id,
+                    s.agent_id,
+                    s.workspace_id,
+                    s.external_session_id,
+                    s.title,
+                    s.project_path,
+                    s.started_at,
+                    s.last_active_at,
+                    s.message_count,
+                    s.input_tokens,
+                    s.output_tokens,
+                    s.estimated_cost_cents,
+                    s.cost_provenance,
+                    s.model_identifier,
+                    s.created_at,
+                ],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn sessions(
+        &self,
+        workspace_id: Option<&str>,
+        agent_id: Option<AgentId>,
+        limit: usize,
+    ) -> NexusResult<Vec<SessionRecord>> {
+        let lim = limit.clamp(1, 200);
+        let mut query = "SELECT id, agent_id, workspace_id, external_session_id, title, project_path, started_at, last_active_at, message_count, input_units, output_units, estimated_cost_cents, cost_provenance, model_identifier, created_at FROM agent_sessions WHERE 1=1".to_string();
+        let mut param_vals: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(ws_id) = workspace_id {
+            query.push_str(" AND workspace_id = ?");
+            param_vals.push(Box::new(ws_id.to_string()));
+        }
+        if let Some(ag_id) = agent_id {
+            query.push_str(" AND agent_id = ?");
+            param_vals.push(Box::new(ag_id.as_str().to_string()));
+        }
+        query.push_str(" ORDER BY last_active_at DESC LIMIT ?");
+        param_vals.push(Box::new(lim as i64));
+
+        let mut stmt = self.conn.prepare(&query).map_err(db_err)?;
+        let param_refs: Vec<&dyn rusqlite::ToSql> = param_vals.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt
+            .query_map(&param_refs[..], |r| {
+                Ok(SessionRecord {
+                    id: r.get(0)?,
+                    agent_id: r.get(1)?,
+                    workspace_id: r.get(2)?,
+                    external_session_id: r.get(3)?,
+                    title: r.get(4)?,
+                    project_path: r.get(5)?,
+                    started_at: r.get(6)?,
+                    last_active_at: r.get(7)?,
+                    message_count: r.get(8)?,
+                    input_tokens: r.get(9)?,
+                    output_tokens: r.get(10)?,
+                    estimated_cost_cents: r.get(11)?,
+                    cost_provenance: r.get(12)?,
+                    model_identifier: r.get(13)?,
+                    created_at: r.get(14)?,
+                })
+            })
+            .map_err(db_err)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(db_err)?);
+        }
+        Ok(out)
+    }
+
+    pub fn get_session(&self, id: &str) -> NexusResult<Option<SessionRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, agent_id, workspace_id, external_session_id, title, project_path, started_at, last_active_at, message_count, input_units, output_units, estimated_cost_cents, cost_provenance, model_identifier, created_at
+                 FROM agent_sessions WHERE id = ?1",
+            )
+            .map_err(db_err)?;
+        let mut rows = stmt
+            .query_map([id], |r| {
+                Ok(SessionRecord {
+                    id: r.get(0)?,
+                    agent_id: r.get(1)?,
+                    workspace_id: r.get(2)?,
+                    external_session_id: r.get(3)?,
+                    title: r.get(4)?,
+                    project_path: r.get(5)?,
+                    started_at: r.get(6)?,
+                    last_active_at: r.get(7)?,
+                    message_count: r.get(8)?,
+                    input_tokens: r.get(9)?,
+                    output_tokens: r.get(10)?,
+                    estimated_cost_cents: r.get(11)?,
+                    cost_provenance: r.get(12)?,
+                    model_identifier: r.get(13)?,
+                    created_at: r.get(14)?,
+                })
+            })
+            .map_err(db_err)?;
+        match rows.next() {
+            Some(res) => Ok(Some(res.map_err(db_err)?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn delete_session(&self, id: &str) -> NexusResult<()> {
+        let deleted = self
+            .conn
+            .execute("DELETE FROM agent_sessions WHERE id = ?1", [id])
+            .map_err(db_err)?;
+        if deleted == 0 {
+            return Err(NexusError::new("session.not_found"));
+        }
+        Ok(())
     }
 
     /// Prunes resolved history older than `cutoff_rfc3339`. Unresolved (`executing` /
@@ -1296,5 +1492,68 @@ mod tests {
             s.delete_workspace("ws_1").unwrap_err().code,
             "workspace.not_found"
         );
+    }
+
+    #[test]
+    fn session_crud_and_workspace_link() {
+        let s = Store::open_in_memory().unwrap();
+        let ws = WorkspaceRecord {
+            id: "ws_alpha".into(),
+            name: "Alpha Workspace".into(),
+            path: "/Users/test/alpha".into(),
+            primary_agent: "claude".into(),
+            fallback_agent: None,
+            model_id: None,
+            profile_id: None,
+            created_at: "2026-11-05T00:00:00Z".into(),
+            updated_at: "2026-11-05T00:00:00Z".into(),
+            last_opened_at: None,
+        };
+        s.insert_workspace(&ws).unwrap();
+
+        let session = SessionRecord {
+            id: "sess_1".into(),
+            agent_id: "claude".into(),
+            workspace_id: Some("ws_alpha".into()),
+            external_session_id: "ext-uuid-1".into(),
+            title: "Implement session continuity".into(),
+            project_path: "/Users/test/alpha".into(),
+            started_at: "2026-11-05T00:00:00Z".into(),
+            last_active_at: "2026-11-05T00:15:00Z".into(),
+            message_count: 12,
+            input_tokens: 15000,
+            output_tokens: 3000,
+            estimated_cost_cents: 9,
+            cost_provenance: "Official pricing".into(),
+            model_identifier: Some("claude-3-5-sonnet".into()),
+            created_at: "2026-11-05T00:00:00Z".into(),
+        };
+        s.insert_or_update_session(&session).unwrap();
+
+        assert_eq!(s.counts().unwrap().session_count, 1);
+        let list = s.sessions(Some("ws_alpha"), None, 50).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].title, "Implement session continuity");
+        assert_eq!(list[0].message_count, 12);
+
+        // Update on conflict
+        let mut updated = session.clone();
+        updated.message_count = 14;
+        updated.input_tokens = 20000;
+        s.insert_or_update_session(&updated).unwrap();
+        let fetched = s.get_session("sess_1").unwrap().unwrap();
+        assert_eq!(fetched.message_count, 14);
+        assert_eq!(fetched.input_tokens, 20000);
+
+        // Workspace deletion nullifies workspace_id, retaining session reference
+        s.delete_workspace("ws_alpha").unwrap();
+        let list_after_ws_del = s.sessions(None, None, 50).unwrap();
+        assert_eq!(list_after_ws_del.len(), 1);
+        assert_eq!(list_after_ws_del[0].workspace_id, None);
+
+        // Explicit session deletion
+        s.delete_session("sess_1").unwrap();
+        assert_eq!(s.sessions(None, None, 50).unwrap().len(), 0);
+        assert_eq!(s.counts().unwrap().session_count, 0);
     }
 }

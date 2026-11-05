@@ -1,0 +1,21 @@
+{
+  "title": "Agent Sessions",
+  "kicker": "Session Continuity",
+  "description": "Resume previous project conversations directly with the designated Agent.",
+  "noSessions": "No active sessions recorded yet for this workspace.",
+  "noSessionsHelp": "When you launch an Agent from Nexus or in your project terminal, sessions will be indexed here automatically.",
+  "resume": "Resume",
+  "resuming": "Resuming...",
+  "resumeSuccess": "Session resumed in terminal",
+  "resumeFailed": "Failed to resume session",
+  "delete": "Remove reference",
+  "deleteConfirm": "Remove this session reference from Nexus? This will not delete any Agent files on your computer.",
+  "messages": "{{count}} messages",
+  "tokens": "{{count}} tokens",
+  "tokensDetail": "{{input}} in / {{output}} out",
+  "estimatedCost": "Est. {{cost}}",
+  "lastActive": "Last active: {{time}}",
+  "provenanceLocal": "Local reference",
+  "viewDetails": "Inspect session",
+  "commandPreview": "Resume command"
+}

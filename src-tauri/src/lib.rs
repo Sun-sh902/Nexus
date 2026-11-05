@@ -24,7 +24,9 @@ mod platform;
 #[cfg(test)]
 mod scenario_tests;
 mod secrets;
+mod sessions;
 mod store;
+mod usage_insights;
 mod workspaces;
 
 #[derive(Serialize)]
@@ -75,7 +77,11 @@ pub fn run() {
             ipc::nexus_create_workspace,
             ipc::nexus_delete_workspace,
             ipc::nexus_launch_workspace,
-            ipc::nexus_consult_ai_doctor
+            ipc::nexus_consult_ai_doctor,
+            ipc::nexus_list_sessions,
+            ipc::nexus_resume_session,
+            ipc::nexus_delete_session,
+            ipc::nexus_usage_insights
         ])
         .setup(|app| {
             // Nexus-owned data lives in the per-app data directory, never inside Agent folders.

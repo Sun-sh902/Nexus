@@ -1,6 +1,6 @@
 import { activity, agents, extensions, findModel, findProfile, findProvider, models, profiles, providers, system, type AgentFixture } from './fixtures';
 import type { ActivityView, AgentView, ExtensionView, NodeKey, NodeState, Text, ToolView } from './view';
-import type { AgentId, AiDoctorConsultation, WorkspaceView } from '../app/backend';
+import type { AgentId, AiDoctorConsultation, SessionSummary, UsageInsights, WorkspaceView } from '../app/backend';
 
 // Explicit demo mode only (browser preview, UI tests). Reuses the original Phase 1 fixture
 // strings so the approved demo reads exactly as before.
@@ -139,4 +139,111 @@ export const demoAiDoctor = (agentId: AgentId): AiDoctorConsultation => ({
   ] : [],
   redactionNotice: '100% of sensitive paths, tokens, and credentials were scrubbed locally before analysis.',
   disclaimer: 'AI Doctor recommendations map strictly to allowlisted native actions. Native confirmation is required before any state changes.',
+});
+
+export const demoSessions = (): SessionSummary[] => [
+  {
+    id: 'demo_sess_1',
+    agentId: 'claude',
+    workspaceId: 'demo_ws_1',
+    externalSessionId: 'claude-sess-alpha',
+    title: 'Visual Health Radar & AI Doctor Integration',
+    projectPath: '/Users/developer/Documents/Nexus',
+    displayPath: '~/Documents/Nexus',
+    startedAt: '2026-11-05T06:30:00Z',
+    lastActiveAt: '2026-11-05T07:15:00Z',
+    messageCount: 18,
+    inputTokens: 24500,
+    outputTokens: 4800,
+    totalTokens: 29300,
+    estimatedCostCents: 15,
+    estimatedCostUsd: '$0.15',
+    costProvenance: 'pricing.official:Claude 3.5 Sonnet',
+    modelIdentifier: 'claude-3-5-sonnet',
+    canResume: true,
+    resumeCommandPreview: 'claude --resume claude-sess-alpha',
+  },
+  {
+    id: 'demo_sess_2',
+    agentId: 'codex',
+    workspaceId: 'demo_ws_1',
+    externalSessionId: 'th_codex_982',
+    title: 'SQLite Migration & Store Performance Testing',
+    projectPath: '/Users/developer/Documents/Nexus',
+    displayPath: '~/Documents/Nexus',
+    startedAt: '2026-11-05T05:00:00Z',
+    lastActiveAt: '2026-11-05T05:40:00Z',
+    messageCount: 12,
+    inputTokens: 16000,
+    outputTokens: 3200,
+    totalTokens: 19200,
+    estimatedCostCents: 7,
+    estimatedCostUsd: '$0.07',
+    costProvenance: 'pricing.official:GPT-4o',
+    modelIdentifier: 'gpt-4o',
+    canResume: true,
+    resumeCommandPreview: 'codex resume th_codex_982',
+  },
+];
+
+export const demoUsageInsights = (): UsageInsights => ({
+  totalInputTokens: 40500,
+  totalOutputTokens: 8000,
+  totalTokens: 48500,
+  totalEstimatedCostUsd: '$0.22',
+  totalSessionsCount: 2,
+  byAgent: [
+    {
+      agentId: 'claude',
+      sessionCount: 1,
+      totalTokens: 29300,
+      inputTokens: 24500,
+      outputTokens: 4800,
+      estimatedCostUsd: '$0.15',
+      percentageOfTotal: 60.4,
+    },
+    {
+      agentId: 'codex',
+      sessionCount: 1,
+      totalTokens: 19200,
+      inputTokens: 16000,
+      outputTokens: 3200,
+      estimatedCostUsd: '$0.07',
+      percentageOfTotal: 39.6,
+    },
+  ],
+  byModel: [
+    {
+      modelIdentifier: 'claude-3-5-sonnet',
+      sessionCount: 1,
+      inputTokens: 24500,
+      outputTokens: 4800,
+      totalTokens: 29300,
+      estimatedCostUsd: '$0.15',
+      isEstimated: true,
+    },
+    {
+      modelIdentifier: 'gpt-4o',
+      sessionCount: 1,
+      inputTokens: 16000,
+      outputTokens: 3200,
+      totalTokens: 19200,
+      estimatedCostUsd: '$0.07',
+      isEstimated: true,
+    },
+  ],
+  byWorkspace: [
+    {
+      workspaceId: 'demo_ws_1',
+      workspaceName: 'Nexus Core',
+      sessionCount: 2,
+      totalTokens: 48500,
+      estimatedCostUsd: '$0.22',
+    },
+  ],
+  provenanceNotes: [
+    'usage.provenance.local_only',
+    'usage.provenance.official_rates',
+    'usage.provenance.non_billing_estimate',
+  ],
 });
