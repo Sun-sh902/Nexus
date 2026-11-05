@@ -8,9 +8,13 @@ import {
   type AgentId,
   type ConflictResolutionStrategy,
   type CreateWorkspaceRequest,
+  type ExtensionPermissionAnalysis,
   type ModelsView,
   type Overview,
+  type RegistryExtension,
+  type RegistrySyncSummary,
   type SessionSummary,
+  type SignatureVerificationResult,
   type SyncCycleResult,
   type SyncDeviceSummary,
   type UsageInsights,
@@ -23,6 +27,8 @@ import {
   demoAgents,
   demoAiDoctor,
   demoExtensions,
+  demoRegistryExtensions,
+  demoRegistrySyncSummary,
   demoSessions,
   demoSyncDevices,
   demoSyncResult,
@@ -48,6 +54,9 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
   const [syncDevices, setSyncDevices] = useState<SyncDeviceSummary[]>(mode === 'demo' ? demoSyncDevices() : []);
   const [syncStatus, setSyncStatus] = useState<SyncCycleResult | null>(mode === 'demo' ? demoSyncResult() : null);
   const [syncing, setSyncing] = useState(false);
+  const [registryExtensions, setRegistryExtensions] = useState<RegistryExtension[]>(mode === 'demo' ? demoRegistryExtensions() : []);
+  const [registrySyncSummary, setRegistrySyncSummary] = useState<RegistrySyncSummary | null>(mode === 'demo' ? demoRegistrySyncSummary() : null);
+  const [registryLoading, setRegistryLoading] = useState(false);
   const [status, setStatus] = useState<NexusData['status']>(mode === 'live' ? 'loading' : 'ready');
   const [error, setError] = useState<NexusError | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -139,6 +148,77 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     }
   }, [mode, reloadAccount]);
 
+  const reloadRegistry = useCallback(async (query?: string, tier?: string) => {
+    if (mode !== 'live') {
+      let list = demoRegistryExtensions();
+      if (tier && tier !== 'all') list = list.filter(e => e.publisher.trustTier === tier);
+      if (query?.trim()) {
+        const q = query.trim().toLowerCase();
+        list = list.filter(e => e.name.toLowerCase().includes(q) || e.displayName.toLowerCase().includes(q) || e.description.toLowerCase().includes(q));
+      }
+      setRegistryExtensions(list);
+      return;
+    }
+    setRegistryLoading(true);
+    try {
+      const list = await backend.listRegistryExtensions(query, tier);
+      setRegistryExtensions(list);
+    } catch {
+      // non-fatal
+    } finally {
+      setRegistryLoading(false);
+    }
+  }, [mode]);
+
+  const analyzePermissions = useCallback(async (extensionId: string, agentId: AgentId): Promise<ExtensionPermissionAnalysis> => {
+    if (mode === 'live') {
+      return await backend.analyzeExtensionPermissions(extensionId, agentId);
+    }
+    const ext = demoRegistryExtensions().find(e => e.id === extensionId);
+    return {
+      extensionId,
+      targetAgent: agentId,
+      existingPermissions: [],
+      requestedPermissions: ext?.permissions ?? [],
+      deltas: (ext?.permissions ?? []).map(p => ({
+        permission: p,
+        change: 'added' as const,
+        isPrivilegeEscalation: p.critical,
+      })),
+      hasPrivilegeEscalation: ext?.permissions.some(p => p.critical) ?? false,
+      requiresExplicitConfirmation: (ext?.permissions.some(p => p.critical) || ext?.reviewLevel === 'revoked') ?? false,
+      isRevoked: ext?.reviewLevel === 'revoked',
+      revocationReason: ext?.revocationReason ?? null,
+    };
+  }, [mode]);
+
+  const verifySignature = useCallback(async (extensionId: string): Promise<SignatureVerificationResult> => {
+    if (mode === 'live') {
+      return await backend.verifyExtensionSignature(extensionId);
+    }
+    const ext = demoRegistryExtensions().find(e => e.id === extensionId);
+    return {
+      extensionId,
+      publisherId: ext?.publisher.publisherId ?? 'pub_mock',
+      keyFingerprint: ext?.publisher.publicKeyFingerprint ?? 'ed25519:mock',
+      manifestSha256: ext?.manifestSha256 ?? 'mock_sha256',
+      computedSha256: ext?.manifestSha256 ?? 'mock_sha256',
+      status: ext?.signatureStatus ?? 'valid',
+      verifiedAt: new Date().toISOString(),
+      isTrusted: ext?.signatureStatus === 'valid' && ext?.publisher.trustTier !== 'community',
+    };
+  }, [mode]);
+
+  const refreshRegistry = useCallback(async (force?: boolean) => {
+    if (mode === 'live') {
+      const summary = await backend.refreshRegistryIndex(force);
+      setRegistrySyncSummary(summary);
+      await reloadRegistry();
+    } else {
+      setRegistrySyncSummary(demoRegistrySyncSummary());
+    }
+  }, [mode, reloadRegistry]);
+
   const load = useCallback(async (refresh: boolean) => {
     if (mode !== 'live') return;
     const mine = ++generation.current;
@@ -154,6 +234,8 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       void reloadSessions();
       void reloadUsageInsights();
       void reloadAccount();
+      void reloadRegistry();
+      void refreshRegistry();
     } catch (caught) {
       if (mine !== generation.current) return;
       setError(caught instanceof NexusError ? caught : new NexusError({ code: 'ipc.unavailable', params: [], retryable: true }));
@@ -161,7 +243,7 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     } finally {
       if (mine === generation.current) setRefreshing(false);
     }
-  }, [mode, reloadWorkspaces, reloadSessions, reloadUsageInsights, reloadAccount]);
+  }, [mode, reloadWorkspaces, reloadSessions, reloadUsageInsights, reloadAccount, reloadRegistry, refreshRegistry]);
 
   const reloadModels = useCallback(async () => {
     if (mode !== 'live') return;
@@ -284,13 +366,21 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       resolveSyncConflict,
       exportAccountBundle,
       purgeCloudSync,
+      registryExtensions,
+      registrySyncSummary,
+      registryLoading,
+      reloadRegistry,
+      analyzePermissions,
+      verifySignature,
+      refreshRegistry,
       findAgent: (id: string) => agents.find(agent => agent.id === id),
     };
   }, [
     mode, status, error, overview, workspaces, sessions, usageInsights, account, syncDevices, syncStatus, syncing,
     refreshing, load, models, modelsError, reloadModels, reloadWorkspaces, createWorkspace, deleteWorkspace,
     launchWorkspace, consultAiDoctor, reloadSessions, resumeSession, deleteSession, reloadUsageInsights,
-    reloadAccount, switchAccountTier, triggerSync, resolveSyncConflict, exportAccountBundle, purgeCloudSync
+    reloadAccount, switchAccountTier, triggerSync, resolveSyncConflict, exportAccountBundle, purgeCloudSync,
+    registryExtensions, registrySyncSummary, registryLoading, reloadRegistry, analyzePermissions, verifySignature, refreshRegistry
   ]);
   return <NexusContext.Provider value={value}>{children}</NexusContext.Provider>;
 }

@@ -42,6 +42,11 @@
     "allow-nexus-trigger-sync",
     "allow-nexus-resolve-sync-conflict",
     "allow-nexus-export-account-bundle",
-    "allow-nexus-purge-cloud-sync"
+    "allow-nexus-purge-cloud-sync",
+    "allow-nexus-list-registry-extensions",
+    "allow-nexus-get-registry-extension",
+    "allow-nexus-analyze-extension-permissions",
+    "allow-nexus-verify-extension-signature",
+    "allow-nexus-refresh-registry-index"
   ]
 }

@@ -10,7 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use std::path::Path;
 
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 
 const MIGRATIONS: &[(i64, &str)] = &[
     (
@@ -133,6 +133,44 @@ CREATE INDEX idx_sync_envelopes_device ON sync_envelopes(device_id);
 CREATE INDEX idx_sync_envelopes_entity ON sync_envelopes(entity_type, entity_id);
 "#,
     ),
+    (
+        5,
+        r#"
+CREATE TABLE registry_publishers (
+  publisher_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  verified INTEGER NOT NULL DEFAULT 0,
+  trust_tier TEXT NOT NULL DEFAULT 'community',
+  public_key_fingerprint TEXT NOT NULL,
+  website_url TEXT,
+  support_url TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE registry_extensions (
+  extension_id TEXT PRIMARY KEY,
+  publisher_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  extension_type TEXT NOT NULL,
+  version TEXT NOT NULL,
+  review_level TEXT NOT NULL,
+  signature_status TEXT NOT NULL,
+  manifest_sha256 TEXT NOT NULL,
+  signature_ed25519 TEXT NOT NULL,
+  permissions_json TEXT NOT NULL DEFAULT '[]',
+  compatible_agents_json TEXT NOT NULL DEFAULT '[]',
+  download_size INTEGER NOT NULL DEFAULT 0,
+  revocation_reason TEXT,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(publisher_id) REFERENCES registry_publishers(publisher_id)
+);
+CREATE INDEX idx_registry_extensions_type ON registry_extensions(extension_type);
+CREATE INDEX idx_registry_extensions_review ON registry_extensions(review_level);
+CREATE INDEX idx_registry_extensions_publisher ON registry_extensions(publisher_id);
+"#,
+    ),
 ];
 
 pub struct Store {
@@ -208,6 +246,42 @@ pub struct StoreCounts {
     pub session_count: i64,
     pub device_count: i64,
     pub envelope_count: i64,
+    pub registry_extension_count: i64,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryPublisherRecord {
+    pub publisher_id: String,
+    pub name: String,
+    pub display_name: String,
+    pub verified: bool,
+    pub trust_tier: String,
+    pub public_key_fingerprint: String,
+    pub website_url: Option<String>,
+    pub support_url: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryExtensionRecord {
+    pub extension_id: String,
+    pub publisher_id: String,
+    pub name: String,
+    pub display_name: String,
+    pub description: String,
+    pub extension_type: String,
+    pub version: String,
+    pub review_level: String,
+    pub signature_status: String,
+    pub manifest_sha256: String,
+    pub signature_ed25519: String,
+    pub permissions_json: String,
+    pub compatible_agents_json: String,
+    pub download_size: i64,
+    pub revocation_reason: Option<String>,
+    pub updated_at: String,
 }
 
 #[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -954,6 +1028,10 @@ impl Store {
             .conn
             .query_row("SELECT COUNT(*) FROM sync_envelopes", [], |r| r.get(0))
             .unwrap_or(0);
+        let registry_extension_count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM registry_extensions", [], |r| r.get(0))
+            .unwrap_or(0);
         Ok(StoreCounts {
             operation_count,
             unresolved_count,
@@ -963,6 +1041,7 @@ impl Store {
             session_count,
             device_count,
             envelope_count,
+            registry_extension_count,
         })
     }
 
@@ -1410,6 +1489,221 @@ impl Store {
             .execute("DELETE FROM sync_devices WHERE is_current = 0", [])
             .map_err(db_err)?;
         Ok(n)
+    }
+
+    // ---- Extension Registry & Marketplace (Phase 12) ---------------------------------------
+
+    pub fn upsert_registry_publisher(&self, p: &RegistryPublisherRecord) -> NexusResult<()> {
+        self.conn
+            .execute(
+                "INSERT INTO registry_publishers (publisher_id, name, display_name, verified, trust_tier, public_key_fingerprint, website_url, support_url, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                 ON CONFLICT(publisher_id) DO UPDATE SET
+                    name = excluded.name,
+                    display_name = excluded.display_name,
+                    verified = excluded.verified,
+                    trust_tier = excluded.trust_tier,
+                    public_key_fingerprint = excluded.public_key_fingerprint,
+                    website_url = excluded.website_url,
+                    support_url = excluded.support_url",
+                params![
+                    p.publisher_id,
+                    p.name,
+                    p.display_name,
+                    if p.verified { 1 } else { 0 },
+                    p.trust_tier,
+                    p.public_key_fingerprint,
+                    p.website_url,
+                    p.support_url,
+                    p.created_at,
+                ],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub fn list_registry_publishers(&self) -> NexusResult<Vec<RegistryPublisherRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT publisher_id, name, display_name, verified, trust_tier, public_key_fingerprint, website_url, support_url, created_at FROM registry_publishers ORDER BY name")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |r| {
+                let v: i64 = r.get(3)?;
+                Ok(RegistryPublisherRecord {
+                    publisher_id: r.get(0)?,
+                    name: r.get(1)?,
+                    display_name: r.get(2)?,
+                    verified: v != 0,
+                    trust_tier: r.get(4)?,
+                    public_key_fingerprint: r.get(5)?,
+                    website_url: r.get(6)?,
+                    support_url: r.get(7)?,
+                    created_at: r.get(8)?,
+                })
+            })
+            .map_err(db_err)?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(db_err)?);
+        }
+        Ok(out)
+    }
+
+    pub fn get_registry_publisher(
+        &self,
+        publisher_id: &str,
+    ) -> NexusResult<Option<RegistryPublisherRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT publisher_id, name, display_name, verified, trust_tier, public_key_fingerprint, website_url, support_url, created_at FROM registry_publishers WHERE publisher_id = ?1")
+            .map_err(db_err)?;
+        let mut rows = stmt
+            .query_map(params![publisher_id], |r| {
+                let v: i64 = r.get(3)?;
+                Ok(RegistryPublisherRecord {
+                    publisher_id: r.get(0)?,
+                    name: r.get(1)?,
+                    display_name: r.get(2)?,
+                    verified: v != 0,
+                    trust_tier: r.get(4)?,
+                    public_key_fingerprint: r.get(5)?,
+                    website_url: r.get(6)?,
+                    support_url: r.get(7)?,
+                    created_at: r.get(8)?,
+                })
+            })
+            .map_err(db_err)?;
+        match rows.next() {
+            Some(res) => Ok(Some(res.map_err(db_err)?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn upsert_registry_extension(&self, e: &RegistryExtensionRecord) -> NexusResult<()> {
+        self.conn
+            .execute(
+                "INSERT INTO registry_extensions (extension_id, publisher_id, name, display_name, description, extension_type, version, review_level, signature_status, manifest_sha256, signature_ed25519, permissions_json, compatible_agents_json, download_size, revocation_reason, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+                 ON CONFLICT(extension_id) DO UPDATE SET
+                    publisher_id = excluded.publisher_id,
+                    name = excluded.name,
+                    display_name = excluded.display_name,
+                    description = excluded.description,
+                    extension_type = excluded.extension_type,
+                    version = excluded.version,
+                    review_level = excluded.review_level,
+                    signature_status = excluded.signature_status,
+                    manifest_sha256 = excluded.manifest_sha256,
+                    signature_ed25519 = excluded.signature_ed25519,
+                    permissions_json = excluded.permissions_json,
+                    compatible_agents_json = excluded.compatible_agents_json,
+                    download_size = excluded.download_size,
+                    revocation_reason = excluded.revocation_reason,
+                    updated_at = excluded.updated_at",
+                params![
+                    e.extension_id,
+                    e.publisher_id,
+                    e.name,
+                    e.display_name,
+                    e.description,
+                    e.extension_type,
+                    e.version,
+                    e.review_level,
+                    e.signature_status,
+                    e.manifest_sha256,
+                    e.signature_ed25519,
+                    e.permissions_json,
+                    e.compatible_agents_json,
+                    e.download_size,
+                    e.revocation_reason,
+                    e.updated_at,
+                ],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn list_registry_extensions(&self) -> NexusResult<Vec<RegistryExtensionRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT extension_id, publisher_id, name, display_name, description, extension_type, version, review_level, signature_status, manifest_sha256, signature_ed25519, permissions_json, compatible_agents_json, download_size, revocation_reason, updated_at FROM registry_extensions ORDER BY name")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(RegistryExtensionRecord {
+                    extension_id: r.get(0)?,
+                    publisher_id: r.get(1)?,
+                    name: r.get(2)?,
+                    display_name: r.get(3)?,
+                    description: r.get(4)?,
+                    extension_type: r.get(5)?,
+                    version: r.get(6)?,
+                    review_level: r.get(7)?,
+                    signature_status: r.get(8)?,
+                    manifest_sha256: r.get(9)?,
+                    signature_ed25519: r.get(10)?,
+                    permissions_json: r.get(11)?,
+                    compatible_agents_json: r.get(12)?,
+                    download_size: r.get(13)?,
+                    revocation_reason: r.get(14)?,
+                    updated_at: r.get(15)?,
+                })
+            })
+            .map_err(db_err)?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(db_err)?);
+        }
+        Ok(out)
+    }
+
+    pub fn get_registry_extension(
+        &self,
+        extension_id: &str,
+    ) -> NexusResult<Option<RegistryExtensionRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT extension_id, publisher_id, name, display_name, description, extension_type, version, review_level, signature_status, manifest_sha256, signature_ed25519, permissions_json, compatible_agents_json, download_size, revocation_reason, updated_at FROM registry_extensions WHERE extension_id = ?1")
+            .map_err(db_err)?;
+        let mut rows = stmt
+            .query_map(params![extension_id], |r| {
+                Ok(RegistryExtensionRecord {
+                    extension_id: r.get(0)?,
+                    publisher_id: r.get(1)?,
+                    name: r.get(2)?,
+                    display_name: r.get(3)?,
+                    description: r.get(4)?,
+                    extension_type: r.get(5)?,
+                    version: r.get(6)?,
+                    review_level: r.get(7)?,
+                    signature_status: r.get(8)?,
+                    manifest_sha256: r.get(9)?,
+                    signature_ed25519: r.get(10)?,
+                    permissions_json: r.get(11)?,
+                    compatible_agents_json: r.get(12)?,
+                    download_size: r.get(13)?,
+                    revocation_reason: r.get(14)?,
+                    updated_at: r.get(15)?,
+                })
+            })
+            .map_err(db_err)?;
+        match rows.next() {
+            Some(res) => Ok(Some(res.map_err(db_err)?)),
+            None => Ok(None),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn revoke_registry_extension(&self, extension_id: &str, reason: &str) -> NexusResult<()> {
+        self.conn
+            .execute(
+                "UPDATE registry_extensions SET review_level = 'revoked', signature_status = 'revoked', revocation_reason = ?1 WHERE extension_id = ?2",
+                params![reason, extension_id],
+            )
+            .map_err(db_err)?;
+        Ok(())
     }
 
     /// Prunes resolved history older than `cutoff_rfc3339`. Unresolved (`executing` /
@@ -1893,5 +2187,72 @@ mod tests {
         // Purge envelopes
         assert_eq!(s.purge_all_sync_envelopes().unwrap(), 1);
         assert_eq!(s.list_sync_envelopes().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn registry_records_roundtrip_and_revocation() {
+        let s = Store::open_in_memory().unwrap();
+        assert_eq!(s.counts().unwrap().registry_extension_count, 0);
+
+        let pub_rec = RegistryPublisherRecord {
+            publisher_id: "pub_anthropic".into(),
+            name: "Anthropic".into(),
+            display_name: "Anthropic PBC".into(),
+            verified: true,
+            trust_tier: "official".into(),
+            public_key_fingerprint: "ed25519:9f8e7d6c".into(),
+            website_url: Some("https://anthropic.com".into()),
+            support_url: Some("https://support.anthropic.com".into()),
+            created_at: "2026-11-05T00:00:00Z".into(),
+        };
+        s.upsert_registry_publisher(&pub_rec).unwrap();
+        let pub_fetched = s
+            .get_registry_publisher("pub_anthropic")
+            .unwrap()
+            .expect("publisher exists");
+        assert_eq!(pub_fetched.name, "Anthropic");
+        assert!(pub_fetched.verified);
+
+        let ext_rec = RegistryExtensionRecord {
+            extension_id: "mcp-memory".into(),
+            publisher_id: "pub_anthropic".into(),
+            name: "@modelcontextprotocol/server-memory".into(),
+            display_name: "Memory MCP Server".into(),
+            description: "Knowledge graph persistence".into(),
+            extension_type: "mcp".into(),
+            version: "1.2.0".into(),
+            review_level: "verified_official".into(),
+            signature_status: "valid".into(),
+            manifest_sha256: "abcdef123456".into(),
+            signature_ed25519: "sig123".into(),
+            permissions_json: "[]".into(),
+            compatible_agents_json: "[\"codex\", \"claude\"]".into(),
+            download_size: 1048576,
+            revocation_reason: None,
+            updated_at: "2026-11-05T00:00:00Z".into(),
+        };
+        s.upsert_registry_extension(&ext_rec).unwrap();
+        assert_eq!(s.counts().unwrap().registry_extension_count, 1);
+
+        let ext_fetched = s
+            .get_registry_extension("mcp-memory")
+            .unwrap()
+            .expect("extension exists");
+        assert_eq!(ext_fetched.version, "1.2.0");
+        assert_eq!(ext_fetched.review_level, "verified_official");
+
+        // Revoke extension
+        s.revoke_registry_extension("mcp-memory", "Security flaw identified in CVE-2026-9999")
+            .unwrap();
+        let ext_revoked = s
+            .get_registry_extension("mcp-memory")
+            .unwrap()
+            .expect("extension exists");
+        assert_eq!(ext_revoked.review_level, "revoked");
+        assert_eq!(ext_revoked.signature_status, "revoked");
+        assert_eq!(
+            ext_revoked.revocation_reason.as_deref(),
+            Some("Security flaw identified in CVE-2026-9999")
+        );
     }
 }

@@ -246,6 +246,87 @@ export interface SyncCycleResult {
 }
 
 export type ConflictResolutionStrategy = 'local_wins' | 'remote_wins' | 'merge_newest';
+
+export type TrustTier = 'official' | 'verified_partner' | 'community';
+export type ReviewLevel = 'verified_official' | 'verified_partner' | 'community_reviewed' | 'experimental' | 'revoked';
+export type SignatureStatus = 'valid' | 'unsigned' | 'invalid_signature' | 'revoked';
+export type ExtensionPermissionType = 'filesystem_read' | 'filesystem_write' | 'network_access' | 'environment_variables' | 'process_execution';
+
+export interface ExtensionPermission {
+  kind: ExtensionPermissionType;
+  description: string;
+  target: string;
+  critical: boolean;
+}
+
+export interface PermissionDelta {
+  permission: ExtensionPermission;
+  change: 'added' | 'removed' | 'unchanged';
+  isPrivilegeEscalation: boolean;
+}
+
+export interface RegistryPublisher {
+  publisherId: string;
+  name: string;
+  displayName: string;
+  verified: boolean;
+  trustTier: TrustTier;
+  publicKeyFingerprint: string;
+  websiteUrl?: string | null;
+  supportUrl?: string | null;
+  createdAt: string;
+}
+
+export interface RegistryExtension {
+  id: string;
+  publisher: RegistryPublisher;
+  name: string;
+  displayName: string;
+  description: string;
+  extensionType: 'mcp' | 'skill';
+  version: string;
+  reviewLevel: ReviewLevel;
+  signatureStatus: SignatureStatus;
+  manifestSha256: string;
+  signatureEd25519: string;
+  permissions: ExtensionPermission[];
+  compatibleAgents: AgentId[];
+  downloadSize: number;
+  revocationReason?: string | null;
+  updatedAt: string;
+  installed: boolean;
+}
+
+export interface ExtensionPermissionAnalysis {
+  extensionId: string;
+  targetAgent: AgentId;
+  existingPermissions: ExtensionPermission[];
+  requestedPermissions: ExtensionPermission[];
+  deltas: PermissionDelta[];
+  hasPrivilegeEscalation: boolean;
+  requiresExplicitConfirmation: boolean;
+  isRevoked: boolean;
+  revocationReason?: string | null;
+}
+
+export interface SignatureVerificationResult {
+  extensionId: string;
+  publisherId: string;
+  keyFingerprint: string;
+  manifestSha256: string;
+  computedSha256: string;
+  status: SignatureStatus;
+  verifiedAt: string;
+  isTrusted: boolean;
+}
+
+export interface RegistrySyncSummary {
+  syncedAt: string;
+  totalExtensions: number;
+  revocationCount: number;
+  offlineCached: boolean;
+  source: string;
+}
 export interface ConfigEdit { targetId: string; location: string; format: string; createsFile: boolean; beforeFingerprint: string | null; afterFingerprint: string; changes: { key: string; before: string | null; after: string | null }[]; diff: { kind: '+' | '-'; text: string }[] }
 export interface PlanView {
   id: string; digest: string; kind: string; agentId: AgentId | null; createdAt: string; expiresAt: string; params: Pairs;
@@ -336,4 +417,14 @@ export const backend = {
     call<void>('nexus_resolve_sync_conflict', { conflictId, strategy }),
   exportAccountBundle: () => call<string>('nexus_export_account_bundle'),
   purgeCloudSync: () => call<number>('nexus_purge_cloud_sync'),
+  listRegistryExtensions: (query?: string, filterTier?: string) =>
+    call<RegistryExtension[]>('nexus_list_registry_extensions', { query: query ?? null, filterTier: filterTier ?? null }),
+  getRegistryExtension: (extensionId: string) =>
+    call<RegistryExtension | null>('nexus_get_registry_extension', { extensionId }),
+  analyzeExtensionPermissions: (extensionId: string, targetAgent: AgentId) =>
+    call<ExtensionPermissionAnalysis>('nexus_analyze_extension_permissions', { extensionId, targetAgent }),
+  verifyExtensionSignature: (extensionId: string) =>
+    call<SignatureVerificationResult>('nexus_verify_extension_signature', { extensionId }),
+  refreshRegistryIndex: (force?: boolean) =>
+    call<RegistrySyncSummary>('nexus_refresh_registry_index', { force: force ?? false }),
 };

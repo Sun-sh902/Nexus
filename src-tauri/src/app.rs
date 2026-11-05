@@ -198,6 +198,7 @@ impl App {
         let vault = BackupVault::new(ctx.data_dir.join("backups"), secrets.clone());
         // Anything still "executing" was interrupted by a crash or kill: mark, never replay.
         store.reconcile_interrupted(Instant::now())?;
+        crate::registry::ensure_registry_seeded(&store)?;
         Ok(App {
             ctx,
             store: Mutex::new(store),
@@ -1208,6 +1209,50 @@ impl App {
         let purged_envelopes = store.purge_all_sync_envelopes()?;
         let _ = store.purge_all_paired_devices()?;
         Ok(purged_envelopes)
+    }
+
+    // ---- Extension Registry & Marketplace (Phase 12) ---------------------------------------
+
+    pub fn list_registry_extensions(
+        &self,
+        query: Option<String>,
+        filter_tier: Option<String>,
+    ) -> NexusResult<Vec<crate::registry::RegistryExtension>> {
+        let store = self.store()?;
+        crate::registry::list_registry_extensions(&store, query.as_deref(), filter_tier.as_deref())
+    }
+
+    pub fn get_registry_extension(
+        &self,
+        extension_id: &str,
+    ) -> NexusResult<Option<crate::registry::RegistryExtension>> {
+        let store = self.store()?;
+        crate::registry::get_registry_extension(&store, extension_id)
+    }
+
+    pub fn analyze_extension_permissions(
+        &self,
+        extension_id: &str,
+        target_agent: AgentId,
+    ) -> NexusResult<crate::registry::ExtensionPermissionAnalysis> {
+        let store = self.store()?;
+        crate::registry::analyze_extension_permissions(&store, extension_id, target_agent)
+    }
+
+    pub fn verify_extension_signature(
+        &self,
+        extension_id: &str,
+    ) -> NexusResult<crate::registry::SignatureVerificationResult> {
+        let store = self.store()?;
+        crate::registry::verify_extension_signature(&store, extension_id)
+    }
+
+    pub fn refresh_registry_index(
+        &self,
+        force: bool,
+    ) -> NexusResult<crate::registry::RegistrySyncSummary> {
+        let store = self.store()?;
+        crate::registry::refresh_registry_index(&store, force)
     }
 }
 

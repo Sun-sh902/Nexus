@@ -521,6 +521,68 @@ pub fn nexus_purge_cloud_sync(
     state.purge_cloud_sync()
 }
 
+#[tauri::command]
+pub fn nexus_list_registry_extensions(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    query: Option<String>,
+    filter_tier: Option<String>,
+) -> NexusResult<Vec<crate::registry::RegistryExtension>> {
+    main_window(&window)?;
+    if let Some(ref q) = query {
+        bounded(q, 128)?;
+    }
+    if let Some(ref ft) = filter_tier {
+        bounded(ft, 32)?;
+    }
+    state.list_registry_extensions(query, filter_tier)
+}
+
+#[tauri::command]
+pub fn nexus_get_registry_extension(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    extension_id: String,
+) -> NexusResult<Option<crate::registry::RegistryExtension>> {
+    main_window(&window)?;
+    bounded(&extension_id, 128)?;
+    state.get_registry_extension(&extension_id)
+}
+
+#[tauri::command]
+pub fn nexus_analyze_extension_permissions(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    extension_id: String,
+    target_agent: String,
+) -> NexusResult<crate::registry::ExtensionPermissionAnalysis> {
+    main_window(&window)?;
+    bounded(&extension_id, 128)?;
+    let agent = AgentId::parse(&target_agent).ok_or_else(|| NexusError::new("agent.invalid_id"))?;
+    state.analyze_extension_permissions(&extension_id, agent)
+}
+
+#[tauri::command]
+pub fn nexus_verify_extension_signature(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    extension_id: String,
+) -> NexusResult<crate::registry::SignatureVerificationResult> {
+    main_window(&window)?;
+    bounded(&extension_id, 128)?;
+    state.verify_extension_signature(&extension_id)
+}
+
+#[tauri::command]
+pub fn nexus_refresh_registry_index(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    force: bool,
+) -> NexusResult<crate::registry::RegistrySyncSummary> {
+    main_window(&window)?;
+    state.refresh_registry_index(force)
+}
+
 #[cfg(test)]
 pub const COMMANDS: &[&str] = &[
     "nexus_overview",
@@ -558,6 +620,11 @@ pub const COMMANDS: &[&str] = &[
     "nexus_resolve_sync_conflict",
     "nexus_export_account_bundle",
     "nexus_purge_cloud_sync",
+    "nexus_list_registry_extensions",
+    "nexus_get_registry_extension",
+    "nexus_analyze_extension_permissions",
+    "nexus_verify_extension_signature",
+    "nexus_refresh_registry_index",
 ];
 
 #[cfg(test)]

@@ -7,10 +7,14 @@ import type {
   AiDoctorConsultation,
   ConflictResolutionStrategy,
   CreateWorkspaceRequest,
+  ExtensionPermissionAnalysis,
   ModelsView,
   NexusError,
   Overview,
+  RegistryExtension,
+  RegistrySyncSummary,
   SessionSummary,
+  SignatureVerificationResult,
   SyncCycleResult,
   SyncDeviceSummary,
   UsageInsights,
@@ -56,6 +60,13 @@ export interface NexusData {
   resolveSyncConflict: (conflictId: string, strategy: ConflictResolutionStrategy) => Promise<void>;
   exportAccountBundle: () => Promise<string>;
   purgeCloudSync: () => Promise<void>;
+  registryExtensions: RegistryExtension[];
+  registrySyncSummary: RegistrySyncSummary | null;
+  registryLoading: boolean;
+  reloadRegistry: (query?: string, tier?: string) => Promise<void>;
+  analyzePermissions: (extensionId: string, agentId: AgentId) => Promise<ExtensionPermissionAnalysis>;
+  verifySignature: (extensionId: string) => Promise<SignatureVerificationResult>;
+  refreshRegistry: (force?: boolean) => Promise<void>;
   findAgent: (id: string) => AgentView | undefined;
 }
 

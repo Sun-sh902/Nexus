@@ -22,6 +22,7 @@ mod models;
 mod native_confirm;
 mod network;
 mod platform;
+mod registry;
 #[cfg(test)]
 mod scenario_tests;
 mod secrets;
@@ -90,7 +91,12 @@ pub fn run() {
             ipc::nexus_trigger_sync,
             ipc::nexus_resolve_sync_conflict,
             ipc::nexus_export_account_bundle,
-            ipc::nexus_purge_cloud_sync
+            ipc::nexus_purge_cloud_sync,
+            ipc::nexus_list_registry_extensions,
+            ipc::nexus_get_registry_extension,
+            ipc::nexus_analyze_extension_permissions,
+            ipc::nexus_verify_extension_signature,
+            ipc::nexus_refresh_registry_index
         ])
         .setup(|app| {
             // Nexus-owned data lives in the per-app data directory, never inside Agent folders.

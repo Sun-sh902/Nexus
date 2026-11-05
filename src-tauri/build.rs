@@ -38,6 +38,11 @@ fn main() {
             "nexus_resolve_sync_conflict",
             "nexus_export_account_bundle",
             "nexus_purge_cloud_sync",
+            "nexus_list_registry_extensions",
+            "nexus_get_registry_extension",
+            "nexus_analyze_extension_permissions",
+            "nexus_verify_extension_signature",
+            "nexus_refresh_registry_index",
         ]),
     ))
     .expect("Tauri build configuration must be valid");
