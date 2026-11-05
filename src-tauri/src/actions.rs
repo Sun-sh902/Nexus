@@ -49,6 +49,14 @@ pub enum ActionRequest {
         agent_id: AgentId,
         name: String,
     },
+    AddSkill {
+        agent_id: AgentId,
+        source_directory: String,
+    },
+    RemoveManagedSkill {
+        agent_id: AgentId,
+        name: String,
+    },
     RestoreBackup {
         backup_id: String,
     },
@@ -124,6 +132,12 @@ pub enum Verify {
     Restore {
         sha256: String,
     },
+    SkillPresent {
+        agent: AgentId,
+        name: String,
+        present: bool,
+        source: Option<String>,
+    },
     /// `launcher` is the stable PATH entry (e.g. `/opt/homebrew/bin/codex`); the installation id
     /// may change on update because Homebrew/native layouts embed the version in the path.
     Lifecycle {
@@ -143,6 +157,14 @@ pub enum Verify {
 pub enum Payload {
     Config(ConfigEdit),
     Process(ProcessSpec),
+    InstallSkill {
+        name: String,
+        source_dir: std::path::PathBuf,
+        target_dir: std::path::PathBuf,
+    },
+    RemoveSkill {
+        target_dir: std::path::PathBuf,
+    },
     /// Nothing to change on disk; verification and Nexus records only (e.g. reconcile).
     RecordOnly,
 }
@@ -202,9 +224,142 @@ fn digest(view: &PlanView, payload: &Payload) -> String {
             e.after_fingerprint
         ),
         Payload::Process(p) => format!("{}|{}", p.program.display(), p.args.join("\u{1f}")),
+        Payload::InstallSkill {
+            source_dir,
+            target_dir,
+            ..
+        } => format!(
+            "install_skill|{}|{}",
+            source_dir.display(),
+            target_dir.display()
+        ),
+        Payload::RemoveSkill { target_dir, .. } => {
+            format!("remove_skill|{}", target_dir.display())
+        }
         Payload::RecordOnly => String::new(),
     };
     sha256_hex(format!("{v}|{extra}").as_bytes())
+}
+
+struct SkillInspection {
+    name: String,
+    description: Option<String>,
+    has_scripts: bool,
+    file_count: usize,
+    total_bytes: u64,
+}
+
+fn inspect_skill_source(
+    ctx: &crate::platform::HostContext,
+    path: &std::path::Path,
+) -> NexusResult<SkillInspection> {
+    if !path.is_absolute()
+        || path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Err(NexusError::new("config.unsafe_path"));
+    }
+    if !path.starts_with(&ctx.home) {
+        return Err(NexusError::new("skill.source_outside_home"));
+    }
+    let meta = std::fs::symlink_metadata(path).map_err(|_| NexusError::new("fs.access_denied"))?;
+    if crate::platform::fs::is_symlink_or_reparse(&meta) {
+        return Err(NexusError::new("config.unsafe_symlink"));
+    }
+    if !meta.is_dir() {
+        return Err(NexusError::new("config.not_regular_file"));
+    }
+
+    let manifest_path = path.join("SKILL.md");
+    let manifest_read =
+        crate::platform::fs::read_bounded(&manifest_path, 256 * 1024).map_err(|e| match e {
+            crate::platform::fs::ReadFailure::NotFound => NexusError::new("skill.missing_manifest"),
+            _ => NexusError::new("skill.invalid_frontmatter"),
+        })?;
+
+    let (front_name, description, valid) =
+        crate::discovery::parse_skill_frontmatter(&String::from_utf8_lossy(&manifest_read.bytes));
+    if !valid {
+        return Err(NexusError::new("skill.invalid_frontmatter"));
+    }
+
+    let name = front_name.unwrap_or_else(|| {
+        path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string()
+    });
+    if name.is_empty()
+        || name.len() > 64
+        || name.starts_with('.')
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(NexusError::new("skill.invalid_name"));
+    }
+
+    let mut file_count = 0usize;
+    let mut total_bytes = 0u64;
+    let mut has_scripts = false;
+
+    fn scan(
+        dir: &std::path::Path,
+        file_count: &mut usize,
+        total_bytes: &mut u64,
+        has_scripts: &mut bool,
+    ) -> NexusResult<()> {
+        let entries = std::fs::read_dir(dir).map_err(|_| NexusError::new("fs.access_denied"))?;
+        for entry in entries {
+            let entry = entry.map_err(|_| NexusError::new("fs.access_denied"))?;
+            let name_str = entry.file_name().to_string_lossy().to_string();
+            if name_str == ".git" || name_str == ".DS_Store" || name_str == "Thumbs.db" {
+                continue;
+            }
+            let p = entry.path();
+            let m =
+                std::fs::symlink_metadata(&p).map_err(|_| NexusError::new("fs.access_denied"))?;
+            if crate::platform::fs::is_symlink_or_reparse(&m) {
+                return Err(NexusError::new("config.unsafe_symlink"));
+            }
+            if m.is_dir() {
+                scan(&p, file_count, total_bytes, has_scripts)?;
+            } else if m.is_file() {
+                *file_count += 1;
+                if *file_count > 200 {
+                    return Err(NexusError::new("skill.too_many_files"));
+                }
+                *total_bytes += m.len();
+                if *total_bytes > 50 * 1024 * 1024 {
+                    return Err(NexusError::new("skill.oversize"));
+                }
+                let lower = name_str.to_lowercase();
+                if lower.ends_with(".sh")
+                    || lower.ends_with(".py")
+                    || lower.ends_with(".js")
+                    || lower.ends_with(".ps1")
+                    || lower.ends_with(".bat")
+                    || lower.ends_with(".cmd")
+                    || lower.ends_with(".exe")
+                    || crate::platform::fs::is_executable_file(&p)
+                {
+                    *has_scripts = true;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    scan(path, &mut file_count, &mut total_bytes, &mut has_scripts)?;
+
+    Ok(SkillInspection {
+        name,
+        description,
+        has_scripts,
+        file_count,
+        total_bytes,
+    })
 }
 
 fn require_capability(snap: &AgentSnapshot, key: &str) -> NexusResult<()> {
@@ -424,6 +579,118 @@ impl App {
                     },
                     "verify.mcpAbsent",
                 )
+            }
+            ActionRequest::AddSkill {
+                agent_id,
+                source_directory,
+            } => {
+                validate_text(&source_directory, 1024)?;
+                let snap = self.fresh_snapshot(agent_id)?;
+                require_capability(&snap, "skills.write")?;
+
+                let source_path = if let Some(stripped) = source_directory.strip_prefix("~/") {
+                    self.ctx.home.join(stripped)
+                } else if source_directory == "~" {
+                    self.ctx.home.clone()
+                } else {
+                    std::path::PathBuf::from(&source_directory)
+                };
+
+                let inspection = inspect_skill_source(&self.ctx, &source_path)?;
+                let adapter = adapters::adapter(agent_id);
+                let skills_dir = adapter
+                    .skills_dir(&self.ctx)
+                    .ok_or_else(|| NexusError::new("capability.unsupported"))?;
+                let target_dir = skills_dir.join(&inspection.name);
+                if target_dir.exists() {
+                    return Err(NexusError::new("extension.already_exists"));
+                }
+
+                let mut params = vec![
+                    ("name".into(), inspection.name.clone()),
+                    ("source".into(), self.ctx.display_path(&source_path)),
+                    ("destination".into(), self.ctx.display_path(&target_dir)),
+                    ("fileCount".into(), inspection.file_count.to_string()),
+                    ("bytes".into(), inspection.total_bytes.to_string()),
+                ];
+                if let Some(desc) = &inspection.description {
+                    params.push(("description".into(), desc.clone()));
+                }
+                let mut view = self.base_view("addSkill", Some(agent_id));
+                view.params = params;
+                view.privileges = "currentUser";
+                view.backup = "notApplicable";
+                view.rollback = "removeFolder";
+                view.verification = "verify.skillPresent";
+                view.warnings = vec![
+                    if inspection.has_scripts {
+                        "warning.skillScripts"
+                    } else {
+                        "warning.skillInstructionsOnly"
+                    },
+                    "warning.publisherUnverified",
+                ];
+
+                let payload = Payload::InstallSkill {
+                    name: inspection.name.clone(),
+                    source_dir: source_path,
+                    target_dir,
+                };
+                view.digest = digest(&view, &payload);
+                Plan {
+                    view,
+                    payload,
+                    verify: Verify::SkillPresent {
+                        agent: agent_id,
+                        name: inspection.name,
+                        present: true,
+                        source: Some(source_directory),
+                    },
+                }
+            }
+            ActionRequest::RemoveManagedSkill { agent_id, name } => {
+                validate_text(&name, 64)?;
+                if !self.store()?.managed_extensions(agent_id)?.contains(&name) {
+                    return Err(NexusError::new("extension.not_managed"));
+                }
+                let snap = self.fresh_snapshot(agent_id)?;
+                require_capability(&snap, "skills.write")?;
+                let adapter = adapters::adapter(agent_id);
+                let skills_dir = adapter
+                    .skills_dir(&self.ctx)
+                    .ok_or_else(|| NexusError::new("capability.unsupported"))?;
+                let target_dir = skills_dir.join(&name);
+                if !target_dir.is_dir() {
+                    return Err(NexusError::new("skill.not_found"));
+                }
+                let target_meta = std::fs::symlink_metadata(&target_dir)
+                    .map_err(|_| NexusError::new("fs.access_denied"))?;
+                if crate::platform::fs::is_symlink_or_reparse(&target_meta) {
+                    return Err(NexusError::new("config.unsafe_symlink"));
+                }
+
+                let mut view = self.base_view("removeManagedSkill", Some(agent_id));
+                view.params = vec![
+                    ("name".into(), name.clone()),
+                    ("target".into(), self.ctx.display_path(&target_dir)),
+                ];
+                view.privileges = "currentUser";
+                view.backup = "notApplicable";
+                view.rollback = "manual";
+                view.verification = "verify.skillAbsent";
+
+                let payload = Payload::RemoveSkill { target_dir };
+                view.digest = digest(&view, &payload);
+                Plan {
+                    view,
+                    payload,
+                    verify: Verify::SkillPresent {
+                        agent: agent_id,
+                        name,
+                        present: false,
+                        source: None,
+                    },
+                }
             }
             ActionRequest::RestoreBackup { backup_id } => self.prepare_restore(&backup_id)?,
             ActionRequest::Install {
@@ -1131,6 +1398,75 @@ impl App {
                     }));
                 }
             }
+            Payload::InstallSkill {
+                name,
+                source_dir,
+                target_dir,
+            } => {
+                self.store()?
+                    .step(&op_id, "skill.copy_started", Instant::now())?;
+                let parent = target_dir
+                    .parent()
+                    .ok_or_else(|| NexusError::new("config.unsafe_path"))?;
+                crate::platform::fs::ensure_private_dir(parent)?;
+                let tmp_dir = parent.join(format!(".{name}.{}.nexus-tmp", new_id("w")));
+                let copy_res = crate::platform::fs::copy_dir_all_safe(
+                    source_dir,
+                    &tmp_dir,
+                    200,
+                    50 * 1024 * 1024,
+                );
+                let rename_res = copy_res.and_then(|_| {
+                    std::fs::rename(&tmp_dir, target_dir)
+                        .map_err(|_| NexusError::new("fs.write_failed"))
+                });
+                if let Err(e) = rename_res {
+                    let _ = std::fs::remove_dir_all(&tmp_dir);
+                    self.store()?.finish_operation(
+                        &op_id,
+                        "failed",
+                        Some(e.code),
+                        Instant::now(),
+                    )?;
+                    result.error = Some(e);
+                    return Ok(result);
+                }
+                self.store()?.step(&op_id, "skill.copied", Instant::now())?;
+                result.verification = self.verify(&plan.verify);
+                if result.verification.outcome == "passed" {
+                    self.record_success(&plan.verify, &op_id, None)?;
+                    result.status = "succeeded";
+                } else {
+                    let _ = crate::platform::fs::remove_dir_all_safe(target_dir);
+                    result.status = "rolledBack";
+                    result.compensation = Some("rolledBack");
+                    result.error = Some(NexusError::new("operation.verification_failed"));
+                }
+            }
+            Payload::RemoveSkill { target_dir } => {
+                self.store()?
+                    .step(&op_id, "skill.remove_started", Instant::now())?;
+                if let Err(e) = crate::platform::fs::remove_dir_all_safe(target_dir) {
+                    self.store()?.finish_operation(
+                        &op_id,
+                        "failed",
+                        Some(e.code),
+                        Instant::now(),
+                    )?;
+                    result.error = Some(e);
+                    return Ok(result);
+                }
+                self.store()?
+                    .step(&op_id, "skill.removed", Instant::now())?;
+                result.verification = self.verify(&plan.verify);
+                if result.verification.outcome == "passed" {
+                    self.record_success(&plan.verify, &op_id, None)?;
+                    result.status = "succeeded";
+                } else {
+                    result.status = "failed";
+                    result.error = Some(NexusError::new("operation.verification_failed"));
+                }
+            }
             Payload::RecordOnly => {
                 result.verification = self.verify(&plan.verify);
                 if result.verification.outcome == "passed" {
@@ -1257,6 +1593,33 @@ impl App {
                     "verify.restoredBytes",
                     true,
                     vec![("sha256".into(), sha256[..12].to_string())],
+                )]
+            }
+            Verify::SkillPresent {
+                agent,
+                name,
+                present,
+                ..
+            } => {
+                let adapter = adapters::adapter(*agent);
+                let skills_dir = adapter.skills_dir(&self.ctx);
+                let exists = match &skills_dir {
+                    Some(dir) => {
+                        let path = dir.join(name);
+                        let manifest = path.join("SKILL.md");
+                        path.is_dir() && manifest.is_file()
+                    }
+                    None => false,
+                };
+                let ok = if *present { exists } else { !exists };
+                vec![check(
+                    if *present {
+                        "verify.skillPresent"
+                    } else {
+                        "verify.skillAbsent"
+                    },
+                    ok,
+                    vec![("name".into(), name.clone())],
                 )]
             }
             Verify::Lifecycle {
@@ -1405,6 +1768,18 @@ impl App {
                 origin,
             } => store.add_managed_extension(*agent, name, origin.as_deref(), op_id, now)?,
             Verify::McpPresent {
+                agent,
+                name,
+                present: false,
+                ..
+            } => store.remove_managed_extension(*agent, name)?,
+            Verify::SkillPresent {
+                agent,
+                name,
+                present: true,
+                source,
+            } => store.add_managed_extension(*agent, name, source.as_deref(), op_id, now)?,
+            Verify::SkillPresent {
                 agent,
                 name,
                 present: false,

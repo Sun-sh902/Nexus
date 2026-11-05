@@ -824,6 +824,114 @@ fn scenario_f_remote_mcp_add_and_managed_removal_preserve_user_entries() {
 }
 
 #[test]
+fn scenario_local_skill_lifecycle_and_safety_disclosures() {
+    let home = Home::new();
+    home.node("26.10.0");
+    home.gemini("0.64.0");
+    // Create source skill with a script
+    home.write(
+        "my-skills/weather-tool/SKILL.md",
+        "---\nname: weather-tool\ndescription: Weather forecasts\n---\n# Weather Tool\n",
+    );
+    home.write("my-skills/weather-tool/fetch.py", "print('fetching')");
+
+    let app = home.app(true);
+    let plan = app
+        .prepare(ActionRequest::AddSkill {
+            agent_id: AgentId::Gemini,
+            source_directory: "~/my-skills/weather-tool".into(),
+        })
+        .unwrap();
+
+    assert!(plan.warnings.contains(&"warning.skillScripts"));
+    assert!(plan.warnings.contains(&"warning.publisherUnverified"));
+    assert_eq!(plan.kind, "addSkill");
+
+    let res = app.confirm(&plan.id, &plan.digest).unwrap();
+    assert_eq!(
+        (res.status, res.verification.outcome),
+        ("succeeded", "passed")
+    );
+
+    // Verify file exists on disk
+    let installed_manifest = home.read(".gemini/skills/weather-tool/SKILL.md");
+    assert!(installed_manifest.contains("weather-tool"));
+
+    // Verify report hydrations: skill is marked nexus_managed
+    let overview = app.overview(true).unwrap();
+    let rep = report(&overview, AgentId::Gemini);
+    let skill = rep
+        .snapshot
+        .extensions
+        .skills
+        .iter()
+        .find(|s| s.name == "weather-tool")
+        .expect("skill must be found in report");
+    assert!(skill.nexus_managed);
+    assert!(skill.has_scripts);
+
+    // Remove managed skill
+    let remove_plan = app
+        .prepare(ActionRequest::RemoveManagedSkill {
+            agent_id: AgentId::Gemini,
+            name: "weather-tool".into(),
+        })
+        .unwrap();
+    let remove_res = app.confirm(&remove_plan.id, &remove_plan.digest).unwrap();
+    assert_eq!(remove_res.status, "succeeded");
+
+    let overview_after = app.overview(true).unwrap();
+    let rep_after = report(&overview_after, AgentId::Gemini);
+    assert!(rep_after
+        .snapshot
+        .extensions
+        .skills
+        .iter()
+        .all(|s| s.name != "weather-tool"));
+}
+
+#[test]
+fn scenario_skill_safety_guards() {
+    let home = Home::new();
+    home.node("26.10.0");
+    home.gemini("0.64.0");
+
+    let app = home.app(true);
+
+    // 1. Missing manifest
+    home.write("invalid-skill/some.txt", "hello");
+    let err = app
+        .prepare(ActionRequest::AddSkill {
+            agent_id: AgentId::Gemini,
+            source_directory: "~/invalid-skill".into(),
+        })
+        .unwrap_err();
+    assert_eq!(err.code, "skill.missing_manifest");
+
+    // 2. Traversal path
+    let err_path = app
+        .prepare(ActionRequest::AddSkill {
+            agent_id: AgentId::Gemini,
+            source_directory: "~/../../etc".into(),
+        })
+        .unwrap_err();
+    assert_eq!(err_path.code, "config.unsafe_path");
+
+    // 3. User pre-existing skill cannot be removed
+    home.write(
+        ".gemini/skills/user-skill/SKILL.md",
+        "---\nname: user-skill\ndescription: User created\n---\n",
+    );
+    let err_not_managed = app
+        .prepare(ActionRequest::RemoveManagedSkill {
+            agent_id: AgentId::Gemini,
+            name: "user-skill".into(),
+        })
+        .unwrap_err();
+    assert_eq!(err_not_managed.code, "extension.not_managed");
+}
+
+#[test]
 fn security_ipc_inputs_are_strictly_typed() {
     for bad in [
         r#"{"kind":"applyModel","agentId":"codex","extra":"x"}"#,

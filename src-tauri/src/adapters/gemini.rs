@@ -290,11 +290,7 @@ impl AgentAdapter for Gemini {
             cap("mcp.addRemote", level, None),
             cap("mcp.addReviewed", level, None),
             cap("skills.read", level, None),
-            cap(
-                "skills.write",
-                Support::Unsupported,
-                Some("capability.skillsWriteDeferred"),
-            ),
+            cap("skills.write", level, None),
             cap("lifecycle.install", level, None),
             cap(
                 "lifecycle.update",
@@ -340,6 +336,9 @@ impl AgentAdapter for Gemini {
     }
     fn mcp_target(&self) -> Option<&dyn McpTarget> {
         Some(self)
+    }
+    fn skills_dir(&self, ctx: &HostContext) -> Option<std::path::PathBuf> {
+        Some(ctx.home.join(".gemini").join("skills"))
     }
 
     fn recipes(&self) -> Vec<Recipe> {

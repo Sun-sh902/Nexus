@@ -110,18 +110,28 @@ function ExtensionsArea({ agent, flow }: { agent: AgentView; flow: ActionFlow })
   const [localRecipe, setLocalRecipe] = useState<'mcp.memory' | 'mcp.filesystem'>('mcp.memory');
   const [localName, setLocalName] = useState('');
   const [localDir, setLocalDir] = useState('');
+  const [skillDir, setSkillDir] = useState('');
   const caps = agent.report?.snapshot.capabilities ?? [];
   const add = caps.find(c => c.key === 'mcp.addRemote');
   const addReviewed = caps.find(c => c.key === 'mcp.addReviewed');
   const managed = new Set(agent.report?.snapshot.extensions.mcp.filter(m => m.nexusManaged).map(m => m.name));
+  const managedSkills = new Set(agent.report?.snapshot.extensions.skills.filter(s => s.nexusManaged).map(s => s.name));
   return <div className="extensions-area">
     <ExtensionRows items={agent.extensions} actions={item => {
       const server = item.live?.server;
-      if (!server) return null;
-      return <div className="row-actions">
-        {server.canToggle && server.enabled !== null && <button className="button button-small" disabled={flow.busy !== null} onClick={() => void flow.prepare({ kind: 'setMcpEnabled', agentId: agent.id, name: server.name, enabled: !server.enabled })}>{t(server.enabled ? 'liveDisable' : 'liveEnable')}</button>}
-        {managed.has(server.name) && <button className="button button-small" disabled={flow.busy !== null} onClick={() => void flow.prepare({ kind: 'removeManagedMcp', agentId: agent.id, name: server.name })}>{t('liveRemoveManaged')}</button>}
-      </div>;
+      const skill = item.live?.skill;
+      if (server) {
+        return <div className="row-actions">
+          {server.canToggle && server.enabled !== null && <button className="button button-small" disabled={flow.busy !== null} onClick={() => void flow.prepare({ kind: 'setMcpEnabled', agentId: agent.id, name: server.name, enabled: !server.enabled })}>{t(server.enabled ? 'liveDisable' : 'liveEnable')}</button>}
+          {managed.has(server.name) && <button className="button button-small" disabled={flow.busy !== null} onClick={() => void flow.prepare({ kind: 'removeManagedMcp', agentId: agent.id, name: server.name })}>{t('liveRemoveManaged')}</button>}
+        </div>;
+      }
+      if (skill && managedSkills.has(skill.name)) {
+        return <div className="row-actions">
+          <button className="button button-small" disabled={flow.busy !== null} onClick={() => void flow.prepare({ kind: 'removeManagedSkill', agentId: agent.id, name: skill.name })}>{t('liveRemoveSkill')}</button>
+        </div>;
+      }
+      return null;
     }} />
     {agent.report && <section className="sheet add-mcp" aria-labelledby="add-mcp-title">
       <header className="sheet-head"><h2 id="add-mcp-title" className="sheet-title">{t('liveAddTitle')}</h2><span className="kicker">{t('liveAddKicker')}</span></header>
@@ -145,6 +155,14 @@ function ExtensionsArea({ agent, flow }: { agent: AgentView; flow: ActionFlow })
           <div className="plan-actions"><button className="button" disabled={!localName || (localRecipe === 'mcp.filesystem' && !localDir) || flow.busy !== null} onClick={() => void flow.prepare({ kind: 'addReviewedMcp', agentId: agent.id, name: localName, recipeId: localRecipe, directory: localRecipe === 'mcp.filesystem' ? localDir : undefined })}>{t('liveAddPreview')}</button></div>
           <p className="field-help">{t('liveReviewedBoundary')}</p>
         </>}
+      </div>
+    </section>}
+    {agent.report && <section className="sheet add-mcp" aria-labelledby="add-skill-title">
+      <header className="sheet-head"><h2 id="add-skill-title" className="sheet-title">{t('liveAddSkillTitle')}</h2><span className="kicker">{t('liveAddSkillKicker')}</span></header>
+      <div className="sheet-body form-stack">
+        <div className="setting-row"><div><label className="setting-label" htmlFor="agent-skill-dir">{t('liveAddSkillDir')}</label><p className="field-help">{t('liveAddSkillDirHelp')}</p></div><span className="search-field"><input id="agent-skill-dir" className="mono" value={skillDir} maxLength={1024} placeholder={t('skillDirPlaceholder')} onChange={event => setSkillDir(event.target.value)} /></span></div>
+        <div className="plan-actions"><button className="button" disabled={!skillDir.trim() || flow.busy !== null} onClick={() => void flow.prepare({ kind: 'addSkill', agentId: agent.id, sourceDirectory: skillDir.trim() })}>{t('liveAddSkillPreview')}</button></div>
+        <p className="field-help">{t('liveAddSkillNotice')}</p>
       </div>
     </section>}
     {agent.report && <ActionPanel flow={flow} />}

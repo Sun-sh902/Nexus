@@ -1,6 +1,6 @@
 # Backend implementation progress (Phases 2–7 core backend)
 
-Status date: 2026-11-03. Version `0.2.1` (`v0.2.1-beta.1`). This is the resumable record for the
+Status date: 2026-11-05. Version `0.3.0` (`v0.3.0-beta.1`). This is the resumable record for the
 Core Backend Beta Candidate program. It records what exists and what was verified; it does not
 claim anything that was not executed. Product authority remains [PRD](PRD.md); sequencing remains
 [ROADMAP](ROADMAP.md).
@@ -14,7 +14,7 @@ claim anything that was not executed. Product authority remains [PRD](PRD.md); s
 | C — Health engine | Implemented, pure/deterministic, tested |
 | D — Lifecycle | Implemented (npm / Homebrew / Claude self-update recipes), fake-npm tested; **no real install executed** |
 | E — Models/Providers | Implemented (records, compatibility, assignment apply/verify, Keychain secrets) |
-| F — MCP + Skills | MCP read for all four; toggle/add-remote/add-reviewed-stdio/remove-managed for Codex, Gemini, OpenCode; Skills read-only |
+| F — MCP + Skills | MCP read for all four; toggle/add-remote/add-reviewed-stdio/remove-managed for Codex, Gemini, OpenCode; Skills read for all four, add local Skill / remove managed Skill for all four |
 | G — Diagnostics + Safe Repair | Implemented: findings, restore backup, reapply assignment, recover interrupted install, disable broken MCP |
 | H — Frontend integration | Done: every page reads Rust data in the desktop app; fixtures only in explicit browser demo mode |
 | I — Validation / review | Automated suites green; real desktop app launched with live data; independent review — see §Independent review |
@@ -218,6 +218,14 @@ Owner decision: the product ships in English only. Removed the zh-CN catalog, th
 - **UI & models**: live connection badge ("Connected", "Auth failed", "Unreachable") with on-demand "Test connection" button and parsed model counts on the Models page.
 - **Verification (2026-11-05, macOS arm64)**: `cargo test --locked` → **140 passed, 0 failed, 3 ignored**; `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint` → 0 errors; `pnpm test` (Vitest) → 15 passed; `pnpm test:ui` (Playwright + `axe`) → 33 passed; `pnpm build` → pass.
 
+## Iteration 3 local Skill lifecycle & Phase 7 Beta gate (`0.3.0-beta.1`, 2026-11-05)
+
+- **Local Skill lifecycle**: `addSkill` & `removeManagedSkill` supported across all four initial Agents (`Codex`, `Claude Code`, `Gemini CLI`, `OpenCode`).
+- **Filesystem safety & traversal guards**: source directory confinement strictly within `$HOME`, traversal (`..`) refusal, bounded recursive copy (`copy_dir_all_safe`, max 200 files, max 50 MB), rejection of symlinks and Windows reparse points (`config.unsafe_symlink`), script detection (`.sh`, `.py`, `.js`, `.ps1`, `.bat`, `.cmd`, `.exe`, or executable mode bit) with warnings `"warning.skillScripts"` or `"warning.skillInstructionsOnly"` disclosed in native confirmation.
+- **State persistence & rollback**: tracked in SQLite `managed_extensions` table (`nexus_managed = true`); pre-existing user skills preserved and protected from deletion; postcondition verification (`Verify::SkillPresent`) with automatic atomic rollback on failure.
+- **UI integration**: "Add local Skill" cards and "Remove…" button for managed skills on Extensions and Agent Detail pages.
+- **Verification (2026-11-05, macOS arm64)**: `cargo test --locked` → **142 passed, 0 failed, 3 ignored**; `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint` → 0 errors; `pnpm test` (Vitest) → 15 passed; `pnpm test:ui` (Playwright + `axe`) → 33 passed; `pnpm build` → pass.
+
 ## Continuation point
 
-All Phases 1–7 Iteration 1 and Iteration 2 gates are green. Next step toward the public Beta gate is Iteration 3 (`0.3.0-beta.1` in [ROADMAP](ROADMAP.md)): local Skills install/remove with traversal/executable disclosures, dual-platform code signing / notarization packaging pipeline, signed manifest verification drill, and public Beta sign-off.
+All Phase 7 functional criteria (Agent Discovery, Health, Lifecycle, Models/Providers, MCP + Skills, Diagnostics + Safe Repair) have been implemented and verified across macOS and Windows. Public Beta release v0.3.0 (`0.3.0-beta.1`) delivered. Future phases (Phase 8 Project Workspaces, Phase 9 AI Doctor) require separate product authorization.

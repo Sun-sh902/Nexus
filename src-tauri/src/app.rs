@@ -405,9 +405,12 @@ impl App {
         now: Instant,
         ops: &[OperationRecord],
     ) -> NexusResult<AgentReport> {
-        let managed_mcp = self.store()?.managed_extensions(snap.agent_id)?;
+        let managed_exts = self.store()?.managed_extensions(snap.agent_id)?;
         for server in &mut snap.extensions.mcp {
-            server.nexus_managed = managed_mcp.contains(&server.name);
+            server.nexus_managed = managed_exts.contains(&server.name);
+        }
+        for skill in &mut snap.extensions.skills {
+            skill.nexus_managed = managed_exts.contains(&skill.name);
         }
         let resolved = self.resolve_assignment(snap.agent_id).unwrap_or(None);
         let ctx = match &resolved {

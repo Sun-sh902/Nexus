@@ -55,6 +55,16 @@
   "liveReviewedDirHelp": "Existing non-hidden folder inside ~ (for example ~/Projects/my-app).",
   "liveReviewedBoundary": "Local MCP servers run as child processes when the Agent starts. Review the command and folder scope in the confirmation dialog.",
   "liveMcpBoundary": "Unknown entries are shown, never deleted. Only servers Nexus added can be removed here.",
-  "liveSkillsBoundary": "Skills are read-only in this version.",
-  "compatibleLive": "Configured for"
+  "liveSkillsBoundary": "Local Skills can be installed from a folder containing SKILL.md. Bundled scripts are disclosed before confirmation and are never executed by Nexus.",
+  "compatibleLive": "Configured for",
+  "liveAddSkillTitle": "Add local Skill",
+  "liveAddSkillKicker": "Folder with SKILL.md · previewed first",
+  "liveAddSkillDir": "Skill folder",
+  "liveAddSkillDirHelp": "Absolute path or ~/ path to a local folder containing a valid SKILL.md file.",
+  "skillDirPlaceholder": "~/my-skills/weather-tool",
+  "liveAddSkillAgent": "Target Agent",
+  "liveAddSkillAgentHelp": "Agent that will receive the skill in its skills folder.",
+  "liveAddSkillPreview": "Preview installation",
+  "liveAddSkillNotice": "The skill folder is copied into the Agent's skills directory. Any bundled scripts are disclosed and require confirmation before copying.",
+  "liveRemoveSkill": "Remove…"
 }

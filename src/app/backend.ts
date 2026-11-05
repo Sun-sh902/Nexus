@@ -13,7 +13,7 @@ export interface Installation { id: string; executable: string; resolved: string
 export interface ConfigSource { id: string; scope: 'user' | 'managed' | 'agentState'; format: string; location: string; status: ObsStatus; fingerprint: string | null; viaSymlink: boolean; tolerant: boolean }
 export interface ModelLayer { kind: string; location: string; value: string | null; effective: boolean; uncertain: boolean }
 export interface McpServer { name: string; transport: string; enabled: boolean | null; command: string | null; commandResolvable: boolean | null; endpointOrigin: string | null; envNames: string[]; scope: string; location: string; nexusManaged: boolean; canToggle: boolean }
-export interface Skill { name: string; description: string | null; location: string; hasScripts: boolean; valid: boolean }
+export interface Skill { name: string; description: string | null; location: string; hasScripts: boolean; valid: boolean; nexusManaged?: boolean }
 export interface Capability { key: string; support: Support; reason: string | null }
 export interface AgentSnapshot {
   snapshotId: string; agentId: AgentId; name: string; vendor: string; observedAt: string; platform: Support;
@@ -66,6 +66,8 @@ export type ActionRequest =
   | { kind: 'addRemoteMcp'; agentId: AgentId; name: string; url: string }
   | { kind: 'addReviewedMcp'; agentId: AgentId; name: string; recipeId: string; directory?: string }
   | { kind: 'removeManagedMcp'; agentId: AgentId; name: string }
+  | { kind: 'addSkill'; agentId: AgentId; sourceDirectory: string }
+  | { kind: 'removeManagedSkill'; agentId: AgentId; name: string }
   | { kind: 'restoreBackup'; backupId: string }
   | { kind: 'install'; agentId: AgentId; recipeId: string }
   | { kind: 'update'; agentId: AgentId; installationId: string }

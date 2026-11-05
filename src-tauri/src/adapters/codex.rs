@@ -237,11 +237,7 @@ impl AgentAdapter for Codex {
             cap("mcp.addRemote", level, None),
             cap("mcp.addReviewed", level, None),
             cap("skills.read", level, None),
-            cap(
-                "skills.write",
-                Support::Unsupported,
-                Some("capability.skillsWriteDeferred"),
-            ),
+            cap("skills.write", level, None),
             cap("lifecycle.install", level, None),
             cap(
                 "lifecycle.update",
@@ -295,6 +291,9 @@ impl AgentAdapter for Codex {
     }
     fn mcp_target(&self) -> Option<&dyn McpTarget> {
         Some(self)
+    }
+    fn skills_dir(&self, ctx: &HostContext) -> Option<std::path::PathBuf> {
+        Some(home(ctx).join("skills"))
     }
 
     fn recipes(&self) -> Vec<Recipe> {

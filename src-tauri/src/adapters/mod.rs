@@ -84,6 +84,9 @@ pub trait AgentAdapter: Send + Sync {
     fn mcp_target(&self) -> Option<&dyn McpTarget> {
         None
     }
+    fn skills_dir(&self, _ctx: &HostContext) -> Option<std::path::PathBuf> {
+        None
+    }
     /// Compiled lifecycle recipes applicable to this Agent (may be empty).
     fn recipes(&self) -> Vec<Recipe>;
 }

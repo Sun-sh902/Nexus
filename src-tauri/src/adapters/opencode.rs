@@ -319,11 +319,7 @@ impl AgentAdapter for OpenCode {
             cap("mcp.addRemote", write, write_reason),
             cap("mcp.addReviewed", write, write_reason),
             cap("skills.read", level, None),
-            cap(
-                "skills.write",
-                Support::Unsupported,
-                Some("capability.skillsWriteDeferred"),
-            ),
+            cap("skills.write", level, None),
             cap("lifecycle.install", level, None),
             cap(
                 "lifecycle.update",
@@ -369,6 +365,9 @@ impl AgentAdapter for OpenCode {
     }
     fn mcp_target(&self) -> Option<&dyn McpTarget> {
         Some(self)
+    }
+    fn skills_dir(&self, ctx: &HostContext) -> Option<std::path::PathBuf> {
+        Some(global_dir(ctx).join("skills"))
     }
 
     fn recipes(&self) -> Vec<Recipe> {

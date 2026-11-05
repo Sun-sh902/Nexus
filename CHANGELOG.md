@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0-beta.1 — 2026-11-05 (pre-release, Core Backend Beta Candidate / Phase 7 Public Beta Gate)
+
+Iteration 3 release completing local Skill lifecycle management, directory traversal and executable script disclosures, safe managed removal, and Phase 7 public Beta readiness.
+
+### Added
+- **Local Skill lifecycle management (`addSkill` and `removeManagedSkill`)**: users can install local Skill packages into any supported Agent (`Codex`, `Claude Code`, `Gemini CLI`, `OpenCode`) directly from existing folders with preview, native confirmation, and independent postcondition verification.
+- **Strict Skill safety & directory traversal guards**: source directories must reside within user `$HOME`, traversal (`..`) is strictly refused, recursive scans enforce file count (max 200) and byte size (max 50 MB) limits, and any symlinks or Windows reparse points cause immediate closed failure.
+- **Deep script & executable disclosure**: skill directories are recursively inspected for executable binaries and scripts (`.sh`, `.py`, `.js`, `.ps1`, `.bat`, `.cmd`, `.exe`), disclosing `"warning.skillScripts"` or `"warning.skillInstructionsOnly"` in the native OS confirmation dialog before copying.
+- **Safe managed removal with automatic compensation**: installed skills are recorded in the `managed_extensions` ledger (`nexus_managed = true`); user pre-existing skills can never be deleted through Nexus; and installation failure automatically compensates by removing temporary and newly copied folders.
+- **Skills UI on Extensions & Agent Detail**: live Skills tab now features an "Add local Skill" card with Agent selection, folder path input, preview action flow, and "Remove…" actions for Nexus-managed skills.
+
 ## 0.2.2-beta.1 — 2026-11-05 (pre-release, Core Backend Beta Candidate)
 
 Iteration 2 release achieving Windows parity, Gate I review closure, and user-initiated Provider connectivity verification.

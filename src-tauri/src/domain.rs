@@ -256,6 +256,7 @@ pub struct Skill {
     pub location: String,
     pub has_scripts: bool,
     pub valid: bool,
+    pub nexus_managed: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]

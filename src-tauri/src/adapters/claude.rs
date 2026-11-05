@@ -327,11 +327,7 @@ impl AgentAdapter for Claude {
                 Some("capability.claudeMcpAgentOwned"),
             ),
             cap("skills.read", level, None),
-            cap(
-                "skills.write",
-                Support::Unsupported,
-                Some("capability.skillsWriteDeferred"),
-            ),
+            cap("skills.write", level, None),
             cap(
                 "lifecycle.install",
                 if os == Os::Windows {
@@ -394,6 +390,9 @@ impl AgentAdapter for Claude {
 
     fn model_target(&self) -> Option<&dyn ModelTarget> {
         Some(self)
+    }
+    fn skills_dir(&self, ctx: &HostContext) -> Option<std::path::PathBuf> {
+        Some(config_dir(ctx).join("skills"))
     }
 
     fn recipes(&self) -> Vec<Recipe> {

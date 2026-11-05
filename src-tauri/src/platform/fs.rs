@@ -75,14 +75,14 @@ pub fn read_bounded(path: &Path, max: u64) -> Result<FileRead, ReadFailure> {
 }
 
 #[cfg(windows)]
-fn is_symlink_or_reparse(meta: &fs::Metadata) -> bool {
+pub fn is_symlink_or_reparse(meta: &fs::Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
     meta.file_type().is_symlink() || (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0
 }
 
 #[cfg(not(windows))]
-fn is_symlink_or_reparse(meta: &fs::Metadata) -> bool {
+pub fn is_symlink_or_reparse(meta: &fs::Metadata) -> bool {
     meta.file_type().is_symlink()
 }
 
@@ -274,6 +274,92 @@ pub fn ensure_private_dir(path: &Path) -> NexusResult<()> {
             .map_err(|_| NexusError::new("fs.write_failed"))?;
     }
     Ok(())
+}
+
+/// Copies all regular files from directory `from` to directory `to`.
+/// Refuses any symlink, reparse point, path traversal, or non-regular files.
+/// Bounds file count (`max_files`) and cumulative bytes (`max_bytes`).
+pub fn copy_dir_all_safe(
+    from: &Path,
+    to: &Path,
+    max_files: usize,
+    max_bytes: u64,
+) -> NexusResult<(usize, u64)> {
+    if !from.is_dir() {
+        return Err(NexusError::new("config.not_regular_file"));
+    }
+    let from_meta = fs::symlink_metadata(from).map_err(|_| NexusError::new("fs.access_denied"))?;
+    if is_symlink_or_reparse(&from_meta) {
+        return Err(NexusError::new("config.unsafe_symlink"));
+    }
+    ensure_private_dir(to)?;
+
+    let mut count = 0usize;
+    let mut total_bytes = 0u64;
+
+    fn walk(
+        src: &Path,
+        dst: &Path,
+        count: &mut usize,
+        total_bytes: &mut u64,
+        max_files: usize,
+        max_bytes: u64,
+    ) -> NexusResult<()> {
+        let entries = fs::read_dir(src).map_err(|_| NexusError::new("fs.access_denied"))?;
+        for entry in entries {
+            let entry = entry.map_err(|_| NexusError::new("fs.access_denied"))?;
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if name_str == ".git" || name_str == ".DS_Store" || name_str == "Thumbs.db" {
+                continue;
+            }
+            let src_path = entry.path();
+            let dst_path = dst.join(&name);
+            let meta =
+                fs::symlink_metadata(&src_path).map_err(|_| NexusError::new("fs.access_denied"))?;
+            if is_symlink_or_reparse(&meta) {
+                return Err(NexusError::new("config.unsafe_symlink"));
+            }
+            if meta.is_dir() {
+                ensure_private_dir(&dst_path)?;
+                walk(
+                    &src_path,
+                    &dst_path,
+                    count,
+                    total_bytes,
+                    max_files,
+                    max_bytes,
+                )?;
+            } else if meta.is_file() {
+                *count += 1;
+                if *count > max_files {
+                    return Err(NexusError::new("skill.too_many_files"));
+                }
+                let len = meta.len();
+                *total_bytes += len;
+                if *total_bytes > max_bytes {
+                    return Err(NexusError::new("skill.oversize"));
+                }
+                fs::copy(&src_path, &dst_path).map_err(|_| NexusError::new("fs.write_failed"))?;
+            }
+        }
+        Ok(())
+    }
+
+    walk(from, to, &mut count, &mut total_bytes, max_files, max_bytes)?;
+    Ok((count, total_bytes))
+}
+
+/// Safely removes directory `path` ensuring it is not a symlink or reparse point.
+pub fn remove_dir_all_safe(path: &Path) -> NexusResult<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let meta = fs::symlink_metadata(path).map_err(|_| NexusError::new("fs.access_denied"))?;
+    if is_symlink_or_reparse(&meta) {
+        return Err(NexusError::new("config.unsafe_symlink"));
+    }
+    fs::remove_dir_all(path).map_err(|_| NexusError::new("fs.write_failed"))
 }
 
 /// True for a regular file with an executable bit (Unix) or `.exe` (Windows).

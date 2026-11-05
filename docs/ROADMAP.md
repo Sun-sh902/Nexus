@@ -146,9 +146,9 @@ Every delivery phase follows [SECURITY](SECURITY.md), [ARCHITECTURE](ARCHITECTUR
 | Typography rendering and token adjustments | Design | Phase 1 sign-off | Both OSes/themes, measured contrast, screenshots and accessibility review |
 | Pricing, cloud vendor, sync encryption and marketplace business model | Product + Security | Respective post-MVP phase | User demand, cost/privacy/security evidence; no early dependency |
 
-## Implementation status (2026-11-03)
+## Implementation status (2026-11-05)
 
-Phases 2–7 core backend were authorized together and implemented as a Core Backend Beta Candidate (`0.2.0-beta.1` on 2026-10-27, hardened in `0.2.1-beta.1` on 2026-11-03), validated on macOS arm64 with automated macOS + Windows CI. The phase definitions above are unchanged. Resolved for this candidate (details and evidence in [BACKEND_IMPLEMENTATION_PROGRESS](BACKEND_IMPLEMENTATION_PROGRESS.md)):
+Phases 2–7 core backend were authorized together and implemented as a Core Backend Beta Candidate (`0.2.0-beta.1` on 2026-10-27, hardened in `0.2.1-beta.1` on 2026-11-03, `0.2.2-beta.1` on 2026-11-05, and `0.3.0-beta.1` on 2026-11-05), validated on macOS arm64 with automated macOS + Windows CI. The phase definitions above are unchanged. Resolved for this candidate (details and evidence in [BACKEND_IMPLEMENTATION_PROGRESS](BACKEND_IMPLEMENTATION_PROGRESS.md)):
 
 | Deferred decision | Resolution for the candidate |
 | --- | --- |
@@ -162,7 +162,7 @@ Sequenced path to complete Phase 7 public Beta (before any separately authorized
 
 1. **Iteration 1 (`0.2.1-beta.1`, delivered 2026-11-03):** Security/freshness hardening, comment-preserving JSONC removal, structural restore checks, `nexus_managed` MCP hydration, reviewed local stdio MCP recipes, Model Profile deletion & revision impact UI, per-Agent operation/health history, Settings storage/retention pruning & redacted diagnostic export, and macOS + Windows CI.
 2. **Iteration 2 (`0.2.2-beta.1`, delivered 2026-11-05):** Windows process `.cmd` shim resolution and reparse point mutation guards, Windows `%AppData%/npm` prefix support, fallible transaction journaling, and user-initiated read-only Provider reachability/credential verification (`nexus_check_provider`) obeying Security §7 origin/redirect/timeout controls with on-demand UI.
-3. **Iteration 3 (`0.3.0-beta.1` Public Beta Gate):** Local Skill folder installation/removal with traversal/symlink/executable-content disclosure, macOS Developer ID notarization + Windows Authenticode signing, signed Manifest/updater verification drill, and usability/accessibility sign-off across macOS and Windows.
+3. **Iteration 3 (`0.3.0-beta.1` Public Beta Gate, delivered 2026-11-05):** Local Skill folder installation (`addSkill`) & managed removal (`removeManagedSkill`) across all 4 Agents (`Codex`, `Claude Code`, `Gemini CLI`, `OpenCode`), strict filesystem safety & traversal guards (confinement to `$HOME`, path traversal `..` rejection, recursive bounds of 200 files / 50 MB, symlink/reparse point refusal, executable script detection and disclosure), state persistence & hydration in SQLite `managed_extensions`, and UI integration in Extensions and Agent Detail pages.
 
 ## Phase 0 review and audit record
 

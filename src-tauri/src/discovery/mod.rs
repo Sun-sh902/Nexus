@@ -498,6 +498,7 @@ pub fn skills_in(ctx: &HostContext, dir: &Path) -> (Vec<Skill>, ObsStatus) {
             location: ctx.display_path(&path),
             has_scripts,
             valid,
+            nexus_managed: false,
         });
     }
     skills.sort_by(|a, b| a.name.cmp(&b.name));

@@ -7,6 +7,8 @@
   "action.addRemoteMcp": "Add remote MCP server",
   "action.addReviewedMcp": "Add reviewed local MCP server",
   "action.removeManagedMcp": "Remove Nexus-added MCP server",
+  "action.addSkill": "Install local Skill",
+  "action.removeManagedSkill": "Remove Nexus-added Skill",
   "action.restoreBackup": "Restore configuration backup",
   "action.install": "Install Agent",
   "action.update": "Update Agent",
@@ -25,6 +27,7 @@
   "backup.encrypted": "Encrypted copy of the current file before writing",
   "backup.notApplicable": "Not applicable",
   "rollback.automaticIfUnchanged": "Automatic if verification fails and the file is unchanged since",
+  "rollback.removeFolder": "Removes the newly created skill folder if verification fails",
   "rollback.manual": "Manual",
   "rollback.reinstallManually": "Reinstall manually",
   "rollback.none": "None",
@@ -43,5 +46,7 @@
   "warning.packageScripts": "The package manager may run install scripts from this package.",
   "warning.versionChosenByAgent": "The Agent's own updater chooses the version; it cannot be pinned in advance.",
   "warning.network": "Downloads from the package registry.",
-  "warning.uninstallExternal": "This installation was not made by Nexus; it is removed with the installer that created it."
+  "warning.uninstallExternal": "This installation was not made by Nexus; it is removed with the installer that created it.",
+  "warning.skillScripts": "The skill folder contains executable scripts or binaries that the Agent may run.",
+  "warning.skillInstructionsOnly": "The skill provides prompt instructions only."
 }
