@@ -622,7 +622,10 @@ mod tests {
             .iter()
             .find(|c| c.category == "Configuration")
             .unwrap();
-        assert!(cause.evidence_snippet.contains(".codex") && cause.evidence_snippet.contains("config.json"));
+        assert!(
+            cause.evidence_snippet.contains(".codex")
+                && cause.evidence_snippet.contains("config.json")
+        );
         assert!(!cause.evidence_snippet.contains("testuser"));
     }
 }
