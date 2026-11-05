@@ -1,8 +1,8 @@
 # Backend implementation progress (Phases 2–7 core backend)
 
-Status date: 2026-11-05. Version `0.6.0` (`v0.6.0`). This is the resumable record for the
+Status date: 2026-11-05. Version `0.7.0` (`v0.7.0`). This is the resumable record for the
 Core Backend Beta Candidate program. It records what exists and what was verified; it does not
-claim anything that was not executed. Product authority remains [PRD](PRD.md); sequencing remains
+product authority remains [PRD](PRD.md); sequencing remains
 [ROADMAP](ROADMAP.md).
 
 ## Current gate
@@ -21,6 +21,7 @@ claim anything that was not executed. Product authority remains [PRD](PRD.md); s
 | J — Phase 8 Workspaces | Implemented: local project path identity, instruction parsing, context-aware readiness, safe terminal launcher, SQLite migration #2 |
 | K — Phase 9 AI Doctor | Implemented: local expert reasoning, privacy redaction, 7-stage radar, 1-click safe repairs |
 | L — Phase 10 Session Continuity & Insights | Implemented: session discovery, safe resume, offline token/cost insights, SQLite migration #3 |
+| M — Phase 11 Accounts & Cloud Sync | Implemented: optional developer identity, offline-first safety guarantees, zero-knowledge AES-256-GCM client-side sync envelopes, paired device mesh, deterministic 3-way conflict resolution, SQLite migration #4 |
 
 ## Repository recovery (Gate A)
 

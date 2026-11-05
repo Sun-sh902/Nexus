@@ -1142,6 +1142,73 @@ impl App {
             &workspaces,
         ))
     }
+
+    // ---- Accounts & Cloud Sync (Phase 11) ----------------------------------------------------
+
+    pub fn get_account(&self) -> NexusResult<crate::accounts::AccountProfile> {
+        let store = self.store()?;
+        match store.active_account()? {
+            Some(rec) => Ok(crate::accounts::record_to_profile(&rec)),
+            None => Ok(crate::accounts::default_offline_account()),
+        }
+    }
+
+    pub fn switch_account_tier(
+        &self,
+        tier_str: &str,
+    ) -> NexusResult<crate::accounts::AccountProfile> {
+        let store = self.store()?;
+        let current = self.get_account()?;
+        let new_tier = crate::accounts::AccountTier::parse(tier_str);
+        let mut updated = current;
+        updated.tier = new_tier;
+        updated.backup_retention_days = new_tier.backup_retention_days();
+        updated.cloud_sync_enabled = matches!(
+            new_tier,
+            crate::accounts::AccountTier::Pro | crate::accounts::AccountTier::Team
+        );
+        updated.is_offline_only = false;
+        if updated.id == "acc_offline_local" {
+            updated.id = "acc_nexus_dev".into();
+            updated.email = "developer@nexus.dev".into();
+            updated.display_name = "Cloud Developer".into();
+            updated.created_at = crate::core::Instant::now().to_rfc3339();
+        }
+        let rec = crate::accounts::profile_to_record(&updated);
+        store.upsert_account(&rec)?;
+        Ok(updated)
+    }
+
+    pub fn list_sync_devices(&self) -> NexusResult<Vec<crate::sync::SyncDeviceSummary>> {
+        let store = self.store()?;
+        crate::sync::ensure_current_device_registered(&store)?;
+        let records = store.list_sync_devices()?;
+        Ok(crate::sync::to_device_summaries(&records))
+    }
+
+    pub fn trigger_sync(&self) -> NexusResult<crate::sync::SyncCycleResult> {
+        let store = self.store()?;
+        crate::sync::execute_sync_cycle(&store)
+    }
+
+    pub fn resolve_sync_conflict(&self, conflict_id: &str, strategy_str: &str) -> NexusResult<()> {
+        let store = self.store()?;
+        let strategy = crate::sync::ConflictResolutionStrategy::parse(strategy_str);
+        crate::sync::resolve_sync_conflict(&store, conflict_id, strategy)
+    }
+
+    pub fn export_account_bundle(&self) -> NexusResult<String> {
+        let store = self.store()?;
+        let account = self.get_account()?;
+        crate::accounts::export_account_data_bundle(&store, &account)
+    }
+
+    pub fn purge_cloud_sync(&self) -> NexusResult<usize> {
+        let store = self.store()?;
+        let purged_envelopes = store.purge_all_sync_envelopes()?;
+        let _ = store.purge_all_paired_devices()?;
+        Ok(purged_envelopes)
+    }
 }
 
 #[cfg(all(test, unix))]

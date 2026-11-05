@@ -1,6 +1,21 @@
 import { createContext, useCallback, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AgentId, AiDoctorConsultation, CreateWorkspaceRequest, ModelsView, NexusError, Overview, SessionSummary, UsageInsights, WorkspaceView } from './backend';
+import type {
+  AccountProfile,
+  AccountTier,
+  AgentId,
+  AiDoctorConsultation,
+  ConflictResolutionStrategy,
+  CreateWorkspaceRequest,
+  ModelsView,
+  NexusError,
+  Overview,
+  SessionSummary,
+  SyncCycleResult,
+  SyncDeviceSummary,
+  UsageInsights,
+  WorkspaceView,
+} from './backend';
 import type { ActivityView, AgentView, ExtensionView, Text, ToolView } from '../data/view';
 
 export type DataMode = 'live' | 'demo';
@@ -31,6 +46,16 @@ export interface NexusData {
   resumeSession: (id: string) => Promise<string>;
   deleteSession: (id: string) => Promise<void>;
   reloadUsageInsights: (workspaceId?: string, agentId?: AgentId) => Promise<void>;
+  account: AccountProfile | null;
+  syncDevices: SyncDeviceSummary[];
+  syncStatus: SyncCycleResult | null;
+  syncing: boolean;
+  reloadAccount: () => Promise<void>;
+  switchAccountTier: (tier: AccountTier) => Promise<void>;
+  triggerSync: () => Promise<SyncCycleResult>;
+  resolveSyncConflict: (conflictId: string, strategy: ConflictResolutionStrategy) => Promise<void>;
+  exportAccountBundle: () => Promise<string>;
+  purgeCloudSync: () => Promise<void>;
   findAgent: (id: string) => AgentView | undefined;
 }
 

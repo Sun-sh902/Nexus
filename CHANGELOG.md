@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.0 — 2026-11-05 (Breakthrough: Phase 11 Accounts & Encrypted Cloud Sync Architecture)
+
+Major breakthrough milestone delivering **Phase 11: Accounts & Encrypted Cloud Sync Architecture**, bringing optional developer identity, Pro entitlement tiers, client-side zero-knowledge encrypted sync envelopes, paired workstation mesh, and deterministic 3-way conflict resolution, while strictly preserving the 100% offline-first local core safety guarantees.
+
+### Added
+- **Developer Identity & Entitlements Engine (`accounts.rs`)**: Optional profile management supporting `Free Core`, `Pro Workspaces`, and `Team Governance` subscription tiers with local simulation and zero payment vendor lock-in.
+- **Offline-First Safety Guarantee**: Local agent discovery, health evaluations, Diagnostics, safe repair catalog, rollbacks, and security updates remain 100% functional offline without an account and are strictly never paywalled.
+- **Client-Side Encrypted Sync Mesh (`sync.rs`)**: Zero-knowledge envelope encryption powered by AES-256-GCM and SHA-256 checksums, ensuring complete cryptographic privacy and tamper detection across devices.
+- **Strict Security & Secrets Exclusions (Security §6 & §11)**: Plaintext authentication tokens, API keys, and credentials remain solely in the OS credential store (macOS Keychain / Windows Credential Manager) and are strictly excluded from sync envelopes and database tables.
+- **Paired Workstation Mesh & Active Device Discovery**: Device pairing tracking (`device_id`, `device_name`, `platform`, `is_current`, `last_synced_at`) with status indicators across macOS, Windows, and Linux.
+- **Deterministic 3-Way Conflict Resolution**: Safe compensation engine offering `LocalWins`, `RemoteWins`, and `MergeNewest` strategies to prevent accidental configuration overwrites.
+- **SQLite Database Migration #4 (`accounts`, `sync_devices`, `sync_envelopes`)**: Created schema version 4 with strict security column assertions, ensuring zero secret column names.
+- **Pro Backup Retention & Export Capabilities**: 90-day retention policies (Pro) / 365-day retention policies (Team), 1-click privacy-compliant JSON data export bundle (`nexus-account-export`), and irreversible cloud purge & device revocation.
+- **Interactive Identity & Sync UI (`AccountSyncPanel.tsx`)**: High-fidelity desktop panel integrated into Settings with live tier switcher, offline guarantee reassurance banner, workstation mesh list, and sync actions.
+- **Typed IPC Allowlist**: Registered and allowlisted `nexus_get_account`, `nexus_switch_account_tier`, `nexus_list_sync_devices`, `nexus_trigger_sync`, `nexus_resolve_sync_conflict`, `nexus_export_account_bundle`, and `nexus_purge_cloud_sync`.
+
 ## 0.6.0 — 2026-11-05 (Breakthrough: Phase 10 Session Continuity & Contextual Usage Insights)
 
 Major breakthrough milestone delivering **Phase 10: Session Continuity & Contextual Usage/Cost Insights**, empowering developers to resume in-flight project conversations directly and understand their LLM resource investment with transparent mathematical accounting and 100% offline privacy guarantees.

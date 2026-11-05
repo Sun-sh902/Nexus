@@ -1,6 +1,15 @@
 import { activity, agents, extensions, findModel, findProfile, findProvider, models, profiles, providers, system, type AgentFixture } from './fixtures';
 import type { ActivityView, AgentView, ExtensionView, NodeKey, NodeState, Text, ToolView } from './view';
-import type { AgentId, AiDoctorConsultation, SessionSummary, UsageInsights, WorkspaceView } from '../app/backend';
+import type {
+  AccountProfile,
+  AgentId,
+  AiDoctorConsultation,
+  SessionSummary,
+  SyncCycleResult,
+  SyncDeviceSummary,
+  UsageInsights,
+  WorkspaceView,
+} from '../app/backend';
 
 // Explicit demo mode only (browser preview, UI tests). Reuses the original Phase 1 fixture
 // strings so the approved demo reads exactly as before.
@@ -246,4 +255,46 @@ export const demoUsageInsights = (): UsageInsights => ({
     'usage.provenance.official_rates',
     'usage.provenance.non_billing_estimate',
   ],
+});
+
+export const demoAccount = (): AccountProfile => ({
+  id: 'acc_demo_pro',
+  email: 'developer@nexus.dev',
+  displayName: 'Lead Engineer',
+  tier: 'pro',
+  avatarUrl: null,
+  createdAt: '2026-10-27T00:00:00Z',
+  expiresAt: '2027-10-27T00:00:00Z',
+  backupRetentionDays: 90,
+  cloudSyncEnabled: true,
+  isOfflineOnly: false,
+});
+
+export const demoSyncDevices = (): SyncDeviceSummary[] => [
+  {
+    deviceId: 'dev_mac_primary',
+    deviceName: 'MacBook Pro 16" (M3 Max)',
+    platform: 'macos',
+    pairedAt: '2026-10-27T00:00:00Z',
+    lastSyncedAt: '2026-11-05T08:30:00Z',
+    isCurrent: true,
+    status: 'synced',
+  },
+  {
+    deviceId: 'dev_win_desktop',
+    deviceName: 'Studio Workstation (Windows 11)',
+    platform: 'windows',
+    pairedAt: '2026-10-29T12:00:00Z',
+    lastSyncedAt: '2026-11-05T07:45:00Z',
+    isCurrent: false,
+    status: 'synced',
+  },
+];
+
+export const demoSyncResult = (): SyncCycleResult => ({
+  envelopesSynced: 4,
+  devicesContacted: 2,
+  conflicts: [],
+  timestamp: '2026-11-05T08:30:00Z',
+  provenance: 'Client-Side Encrypted via AES-256-GCM · Zero Plain Credentials Synced',
 });

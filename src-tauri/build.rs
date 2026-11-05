@@ -31,6 +31,13 @@ fn main() {
             "nexus_resume_session",
             "nexus_delete_session",
             "nexus_usage_insights",
+            "nexus_get_account",
+            "nexus_switch_account_tier",
+            "nexus_list_sync_devices",
+            "nexus_trigger_sync",
+            "nexus_resolve_sync_conflict",
+            "nexus_export_account_bundle",
+            "nexus_purge_cloud_sync",
         ]),
     ))
     .expect("Tauri build configuration must be valid");

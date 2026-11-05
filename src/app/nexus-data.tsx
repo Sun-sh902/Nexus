@@ -1,7 +1,35 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { backend, liveBackend, NexusError, type AgentId, type CreateWorkspaceRequest, type ModelsView, type Overview, type SessionSummary, type UsageInsights, type WorkspaceView } from './backend';
+import {
+  backend,
+  liveBackend,
+  NexusError,
+  type AccountProfile,
+  type AccountTier,
+  type AgentId,
+  type ConflictResolutionStrategy,
+  type CreateWorkspaceRequest,
+  type ModelsView,
+  type Overview,
+  type SessionSummary,
+  type SyncCycleResult,
+  type SyncDeviceSummary,
+  type UsageInsights,
+  type WorkspaceView,
+} from './backend';
 import { agentView, activityViews, toolViews } from '../data/live';
-import { demoActivity, demoAgents, demoAiDoctor, demoExtensions, demoSessions, demoTools, demoUsageInsights, demoWorkspaces } from '../data/demo';
+import {
+  demoAccount,
+  demoActivity,
+  demoAgents,
+  demoAiDoctor,
+  demoExtensions,
+  demoSessions,
+  demoSyncDevices,
+  demoSyncResult,
+  demoTools,
+  demoUsageInsights,
+  demoWorkspaces,
+} from '../data/demo';
 import { NexusContext, type DataMode, type NexusData } from './nexus-context';
 
 // Single data boundary for pages. Inside the desktop runtime every value comes from Rust; the
@@ -16,6 +44,10 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspaces] = useState<WorkspaceView[]>(mode === 'demo' ? demoWorkspaces() : []);
   const [sessions, setSessions] = useState<SessionSummary[]>(mode === 'demo' ? demoSessions() : []);
   const [usageInsights, setUsageInsights] = useState<UsageInsights | null>(mode === 'demo' ? demoUsageInsights() : null);
+  const [account, setAccount] = useState<AccountProfile | null>(mode === 'demo' ? demoAccount() : null);
+  const [syncDevices, setSyncDevices] = useState<SyncDeviceSummary[]>(mode === 'demo' ? demoSyncDevices() : []);
+  const [syncStatus, setSyncStatus] = useState<SyncCycleResult | null>(mode === 'demo' ? demoSyncResult() : null);
+  const [syncing, setSyncing] = useState(false);
   const [status, setStatus] = useState<NexusData['status']>(mode === 'live' ? 'loading' : 'ready');
   const [error, setError] = useState<NexusError | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,6 +80,65 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     }
   }, [mode]);
 
+  const reloadAccount = useCallback(async () => {
+    if (mode !== 'live') return;
+    try {
+      setAccount(await backend.getAccount());
+      setSyncDevices(await backend.listSyncDevices());
+    } catch {
+      // non-fatal
+    }
+  }, [mode]);
+
+  const switchAccountTier = useCallback(async (tier: AccountTier) => {
+    if (mode === 'live') {
+      const updated = await backend.switchAccountTier(tier);
+      setAccount(updated);
+    } else {
+      setAccount(prev => prev ? { ...prev, tier, cloudSyncEnabled: tier !== 'free' } : null);
+    }
+  }, [mode]);
+
+  const triggerSync = useCallback(async () => {
+    setSyncing(true);
+    try {
+      if (mode === 'live') {
+        const res = await backend.triggerSync();
+        setSyncStatus(res);
+        await reloadAccount();
+        return res;
+      }
+      const mockRes = demoSyncResult();
+      setSyncStatus(mockRes);
+      return mockRes;
+    } finally {
+      setSyncing(false);
+    }
+  }, [mode, reloadAccount]);
+
+  const resolveSyncConflict = useCallback(async (conflictId: string, strategy: ConflictResolutionStrategy) => {
+    if (mode === 'live') {
+      await backend.resolveSyncConflict(conflictId, strategy);
+      await reloadAccount();
+    }
+  }, [mode, reloadAccount]);
+
+  const exportAccountBundle = useCallback(async () => {
+    if (mode === 'live') {
+      return await backend.exportAccountBundle();
+    }
+    return JSON.stringify({ demoExport: true, account }, null, 2);
+  }, [mode, account]);
+
+  const purgeCloudSync = useCallback(async () => {
+    if (mode === 'live') {
+      await backend.purgeCloudSync();
+      await reloadAccount();
+    } else {
+      setSyncDevices(prev => prev.filter(d => d.isCurrent));
+    }
+  }, [mode, reloadAccount]);
+
   const load = useCallback(async (refresh: boolean) => {
     if (mode !== 'live') return;
     const mine = ++generation.current;
@@ -62,6 +153,7 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       void reloadWorkspaces();
       void reloadSessions();
       void reloadUsageInsights();
+      void reloadAccount();
     } catch (caught) {
       if (mine !== generation.current) return;
       setError(caught instanceof NexusError ? caught : new NexusError({ code: 'ipc.unavailable', params: [], retryable: true }));
@@ -69,7 +161,7 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     } finally {
       if (mine === generation.current) setRefreshing(false);
     }
-  }, [mode, reloadWorkspaces, reloadSessions, reloadUsageInsights]);
+  }, [mode, reloadWorkspaces, reloadSessions, reloadUsageInsights, reloadAccount]);
 
   const reloadModels = useCallback(async () => {
     if (mode !== 'live') return;
@@ -169,6 +261,10 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       workspaces,
       sessions,
       usageInsights,
+      account,
+      syncDevices,
+      syncStatus,
+      syncing,
       scannedAt: mode === 'demo' ? '2026-10-07T02:30:00Z' : overview?.generatedAt ?? null,
       refreshing,
       refresh: () => load(true),
@@ -182,9 +278,20 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       resumeSession,
       deleteSession,
       reloadUsageInsights,
+      reloadAccount,
+      switchAccountTier,
+      triggerSync,
+      resolveSyncConflict,
+      exportAccountBundle,
+      purgeCloudSync,
       findAgent: (id: string) => agents.find(agent => agent.id === id),
     };
-  }, [mode, status, error, overview, workspaces, sessions, usageInsights, refreshing, load, models, modelsError, reloadModels, reloadWorkspaces, createWorkspace, deleteWorkspace, launchWorkspace, consultAiDoctor, reloadSessions, resumeSession, deleteSession, reloadUsageInsights]);
+  }, [
+    mode, status, error, overview, workspaces, sessions, usageInsights, account, syncDevices, syncStatus, syncing,
+    refreshing, load, models, modelsError, reloadModels, reloadWorkspaces, createWorkspace, deleteWorkspace,
+    launchWorkspace, consultAiDoctor, reloadSessions, resumeSession, deleteSession, reloadUsageInsights,
+    reloadAccount, switchAccountTier, triggerSync, resolveSyncConflict, exportAccountBundle, purgeCloudSync
+  ]);
   return <NexusContext.Provider value={value}>{children}</NexusContext.Provider>;
 }
 

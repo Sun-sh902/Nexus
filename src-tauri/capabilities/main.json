@@ -35,6 +35,13 @@
     "allow-nexus-list-sessions",
     "allow-nexus-resume-session",
     "allow-nexus-delete-session",
-    "allow-nexus-usage-insights"
+    "allow-nexus-usage-insights",
+    "allow-nexus-get-account",
+    "allow-nexus-switch-account-tier",
+    "allow-nexus-list-sync-devices",
+    "allow-nexus-trigger-sync",
+    "allow-nexus-resolve-sync-conflict",
+    "allow-nexus-export-account-bundle",
+    "allow-nexus-purge-cloud-sync"
   ]
 }

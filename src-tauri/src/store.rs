@@ -10,7 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use std::path::Path;
 
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 const MIGRATIONS: &[(i64, &str)] = &[
     (
@@ -98,6 +98,41 @@ CREATE INDEX idx_sessions_agent ON agent_sessions(agent_id);
 CREATE INDEX idx_sessions_last_active ON agent_sessions(last_active_at);
 "#,
     ),
+    (
+        4,
+        r#"
+CREATE TABLE accounts (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  tier TEXT NOT NULL DEFAULT 'free',
+  avatar_url TEXT,
+  created_at TEXT NOT NULL,
+  expires_at TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE sync_devices (
+  device_id TEXT PRIMARY KEY,
+  device_name TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  paired_at TEXT NOT NULL,
+  last_synced_at TEXT NOT NULL,
+  is_current INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE sync_envelopes (
+  envelope_id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  entity_version INTEGER NOT NULL DEFAULT 1,
+  checksum_sha256 TEXT NOT NULL,
+  payload_cipher TEXT NOT NULL,
+  synced_at TEXT NOT NULL
+);
+CREATE INDEX idx_sync_envelopes_device ON sync_envelopes(device_id);
+CREATE INDEX idx_sync_envelopes_entity ON sync_envelopes(entity_type, entity_id);
+"#,
+    ),
 ];
 
 pub struct Store {
@@ -171,6 +206,45 @@ pub struct StoreCounts {
     pub backup_count: i64,
     pub workspace_count: i64,
     pub session_count: i64,
+    pub device_count: i64,
+    pub envelope_count: i64,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountRecord {
+    pub id: String,
+    pub email: String,
+    pub display_name: String,
+    pub tier: String,
+    pub avatar_url: Option<String>,
+    pub created_at: String,
+    pub expires_at: Option<String>,
+    pub is_active: bool,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncDeviceRecord {
+    pub device_id: String,
+    pub device_name: String,
+    pub platform: String,
+    pub paired_at: String,
+    pub last_synced_at: String,
+    pub is_current: bool,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncEnvelopeRecord {
+    pub envelope_id: String,
+    pub device_id: String,
+    pub entity_type: String,
+    pub entity_id: String,
+    pub entity_version: i64,
+    pub checksum_sha256: String,
+    pub payload_cipher: String,
+    pub synced_at: String,
 }
 
 #[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -872,6 +946,14 @@ impl Store {
             .conn
             .query_row("SELECT COUNT(*) FROM agent_sessions", [], |r| r.get(0))
             .unwrap_or(0);
+        let device_count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM sync_devices", [], |r| r.get(0))
+            .unwrap_or(0);
+        let envelope_count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM sync_envelopes", [], |r| r.get(0))
+            .unwrap_or(0);
         Ok(StoreCounts {
             operation_count,
             unresolved_count,
@@ -879,6 +961,8 @@ impl Store {
             backup_count,
             workspace_count,
             session_count,
+            device_count,
+            envelope_count,
         })
     }
 
@@ -1136,6 +1220,196 @@ impl Store {
             return Err(NexusError::new("session.not_found"));
         }
         Ok(())
+    }
+
+    // ---- Accounts & Cloud Sync (Phase 11) ----------------------------------------------------
+
+    pub fn active_account(&self) -> NexusResult<Option<AccountRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, email, display_name, tier, avatar_url, created_at, expires_at, is_active
+                 FROM accounts WHERE is_active = 1 LIMIT 1",
+            )
+            .map_err(db_err)?;
+        let mut rows = stmt
+            .query_map([], |r| {
+                let is_act: i64 = r.get(7)?;
+                Ok(AccountRecord {
+                    id: r.get(0)?,
+                    email: r.get(1)?,
+                    display_name: r.get(2)?,
+                    tier: r.get(3)?,
+                    avatar_url: r.get(4)?,
+                    created_at: r.get(5)?,
+                    expires_at: r.get(6)?,
+                    is_active: is_act != 0,
+                })
+            })
+            .map_err(db_err)?;
+        match rows.next() {
+            Some(res) => Ok(Some(res.map_err(db_err)?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn upsert_account(&self, acc: &AccountRecord) -> NexusResult<()> {
+        self.conn
+            .execute(
+                "INSERT INTO accounts (id, email, display_name, tier, avatar_url, created_at, expires_at, is_active)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                 ON CONFLICT(id) DO UPDATE SET
+                    email = excluded.email,
+                    display_name = excluded.display_name,
+                    tier = excluded.tier,
+                    avatar_url = excluded.avatar_url,
+                    expires_at = excluded.expires_at,
+                    is_active = excluded.is_active",
+                params![
+                    acc.id,
+                    acc.email,
+                    acc.display_name,
+                    acc.tier,
+                    acc.avatar_url,
+                    acc.created_at,
+                    acc.expires_at,
+                    if acc.is_active { 1 } else { 0 },
+                ],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn list_sync_devices(&self) -> NexusResult<Vec<SyncDeviceRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT device_id, device_name, platform, paired_at, last_synced_at, is_current FROM sync_devices ORDER BY last_synced_at DESC")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |r| {
+                let is_cur: i64 = r.get(5)?;
+                Ok(SyncDeviceRecord {
+                    device_id: r.get(0)?,
+                    device_name: r.get(1)?,
+                    platform: r.get(2)?,
+                    paired_at: r.get(3)?,
+                    last_synced_at: r.get(4)?,
+                    is_current: is_cur != 0,
+                })
+            })
+            .map_err(db_err)?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(db_err)?);
+        }
+        Ok(out)
+    }
+
+    pub fn upsert_sync_device(&self, dev: &SyncDeviceRecord) -> NexusResult<()> {
+        self.conn
+            .execute(
+                "INSERT INTO sync_devices (device_id, device_name, platform, paired_at, last_synced_at, is_current)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(device_id) DO UPDATE SET
+                    device_name = excluded.device_name,
+                    platform = excluded.platform,
+                    last_synced_at = excluded.last_synced_at,
+                    is_current = excluded.is_current",
+                params![
+                    dev.device_id,
+                    dev.device_name,
+                    dev.platform,
+                    dev.paired_at,
+                    dev.last_synced_at,
+                    if dev.is_current { 1 } else { 0 },
+                ],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub fn delete_sync_device(&self, device_id: &str) -> NexusResult<()> {
+        self.conn
+            .execute(
+                "DELETE FROM sync_devices WHERE device_id = ?1",
+                params![device_id],
+            )
+            .map_err(db_err)?;
+        self.conn
+            .execute(
+                "DELETE FROM sync_envelopes WHERE device_id = ?1",
+                params![device_id],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn list_sync_envelopes(&self) -> NexusResult<Vec<SyncEnvelopeRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT envelope_id, device_id, entity_type, entity_id, entity_version, checksum_sha256, payload_cipher, synced_at FROM sync_envelopes ORDER BY synced_at DESC")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(SyncEnvelopeRecord {
+                    envelope_id: r.get(0)?,
+                    device_id: r.get(1)?,
+                    entity_type: r.get(2)?,
+                    entity_id: r.get(3)?,
+                    entity_version: r.get(4)?,
+                    checksum_sha256: r.get(5)?,
+                    payload_cipher: r.get(6)?,
+                    synced_at: r.get(7)?,
+                })
+            })
+            .map_err(db_err)?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(db_err)?);
+        }
+        Ok(out)
+    }
+
+    pub fn upsert_sync_envelope(&self, env: &SyncEnvelopeRecord) -> NexusResult<()> {
+        self.conn
+            .execute(
+                "INSERT INTO sync_envelopes (envelope_id, device_id, entity_type, entity_id, entity_version, checksum_sha256, payload_cipher, synced_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                 ON CONFLICT(envelope_id) DO UPDATE SET
+                    entity_version = excluded.entity_version,
+                    checksum_sha256 = excluded.checksum_sha256,
+                    payload_cipher = excluded.payload_cipher,
+                    synced_at = excluded.synced_at",
+                params![
+                    env.envelope_id,
+                    env.device_id,
+                    env.entity_type,
+                    env.entity_id,
+                    env.entity_version,
+                    env.checksum_sha256,
+                    env.payload_cipher,
+                    env.synced_at,
+                ],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn purge_all_sync_envelopes(&self) -> NexusResult<usize> {
+        let n = self
+            .conn
+            .execute("DELETE FROM sync_envelopes", [])
+            .map_err(db_err)?;
+        Ok(n)
+    }
+
+    pub fn purge_all_paired_devices(&self) -> NexusResult<usize> {
+        let n = self
+            .conn
+            .execute("DELETE FROM sync_devices WHERE is_current = 0", [])
+            .map_err(db_err)?;
+        Ok(n)
     }
 
     /// Prunes resolved history older than `cutoff_rfc3339`. Unresolved (`executing` /
@@ -1555,5 +1829,69 @@ mod tests {
         s.delete_session("sess_1").unwrap();
         assert_eq!(s.sessions(None, None, 50).unwrap().len(), 0);
         assert_eq!(s.counts().unwrap().session_count, 0);
+    }
+
+    #[test]
+    fn accounts_and_sync_envelopes_roundtrip() {
+        let s = Store::open_in_memory().unwrap();
+        assert!(s.active_account().unwrap().is_none());
+
+        let acc = AccountRecord {
+            id: "acc_1".into(),
+            email: "dev@nexus.local".into(),
+            display_name: "Lead Developer".into(),
+            tier: "pro".into(),
+            avatar_url: None,
+            created_at: "2026-11-05T00:00:00Z".into(),
+            expires_at: Some("2027-11-05T00:00:00Z".into()),
+            is_active: true,
+        };
+        s.upsert_account(&acc).unwrap();
+        let fetched_acc = s.active_account().unwrap().expect("account present");
+        assert_eq!(fetched_acc.email, "dev@nexus.local");
+        assert_eq!(fetched_acc.tier, "pro");
+
+        let dev_local = SyncDeviceRecord {
+            device_id: "dev_mac".into(),
+            device_name: "MacBook Pro M3 Max".into(),
+            platform: "macos".into(),
+            paired_at: "2026-11-05T00:00:00Z".into(),
+            last_synced_at: "2026-11-05T01:00:00Z".into(),
+            is_current: true,
+        };
+        let dev_remote = SyncDeviceRecord {
+            device_id: "dev_win".into(),
+            device_name: "Windows Desktop".into(),
+            platform: "windows".into(),
+            paired_at: "2026-11-05T00:00:00Z".into(),
+            last_synced_at: "2026-11-05T00:50:00Z".into(),
+            is_current: false,
+        };
+        s.upsert_sync_device(&dev_local).unwrap();
+        s.upsert_sync_device(&dev_remote).unwrap();
+        assert_eq!(s.list_sync_devices().unwrap().len(), 2);
+        assert_eq!(s.counts().unwrap().device_count, 2);
+
+        let env = SyncEnvelopeRecord {
+            envelope_id: "env_1".into(),
+            device_id: "dev_mac".into(),
+            entity_type: "workspace".into(),
+            entity_id: "ws_alpha".into(),
+            entity_version: 1,
+            checksum_sha256: "aabbccdd".into(),
+            payload_cipher: "c2VjcmV0".into(),
+            synced_at: "2026-11-05T01:00:00Z".into(),
+        };
+        s.upsert_sync_envelope(&env).unwrap();
+        assert_eq!(s.list_sync_envelopes().unwrap().len(), 1);
+        assert_eq!(s.counts().unwrap().envelope_count, 1);
+
+        // Purge remote devices preserves local device
+        assert_eq!(s.purge_all_paired_devices().unwrap(), 1);
+        assert_eq!(s.list_sync_devices().unwrap().len(), 1);
+
+        // Purge envelopes
+        assert_eq!(s.purge_all_sync_envelopes().unwrap(), 1);
+        assert_eq!(s.list_sync_envelopes().unwrap().len(), 0);
     }
 }

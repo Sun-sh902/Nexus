@@ -187,6 +187,65 @@ export interface UsageInsights {
   byWorkspace: WorkspaceUsageBreakdown[];
   provenanceNotes: string[];
 }
+
+export type AccountTier = 'free' | 'pro' | 'team';
+
+export interface AccountProfile {
+  id: string;
+  email: string;
+  displayName: string;
+  tier: AccountTier;
+  avatarUrl?: string | null;
+  createdAt: string;
+  expiresAt?: string | null;
+  backupRetentionDays: number;
+  cloudSyncEnabled: boolean;
+  isOfflineOnly: boolean;
+}
+
+export interface EntitlementStatus {
+  tier: AccountTier;
+  isValid: boolean;
+  features: string[];
+  retentionDays: number;
+  maxOperations: number;
+  safetyGuarantee: string;
+}
+
+export type SyncStatus = 'synced' | 'syncing' | 'offline' | 'conflict';
+
+export interface SyncDeviceSummary {
+  deviceId: string;
+  deviceName: string;
+  platform: 'macos' | 'windows' | 'linux';
+  pairedAt: string;
+  lastSyncedAt: string;
+  isCurrent: boolean;
+  status: SyncStatus;
+}
+
+export interface SyncConflict {
+  conflictId: string;
+  entityType: string;
+  entityId: string;
+  localVersion: number;
+  localChecksum: string;
+  remoteDeviceName: string;
+  remoteVersion: number;
+  remoteSyncedAt: string;
+  remoteChecksum: string;
+  description: string;
+}
+
+export interface SyncCycleResult {
+  envelopesSynced: number;
+  devicesContacted: number;
+  conflicts: SyncConflict[];
+  timestamp: string;
+  provenance: string;
+}
+
+export type ConflictResolutionStrategy = 'local_wins' | 'remote_wins' | 'merge_newest';
 export interface ConfigEdit { targetId: string; location: string; format: string; createsFile: boolean; beforeFingerprint: string | null; afterFingerprint: string; changes: { key: string; before: string | null; after: string | null }[]; diff: { kind: '+' | '-'; text: string }[] }
 export interface PlanView {
   id: string; digest: string; kind: string; agentId: AgentId | null; createdAt: string; expiresAt: string; params: Pairs;
@@ -269,4 +328,12 @@ export const backend = {
   resumeSession: (sessionId: string) => call<string>('nexus_resume_session', { sessionId }),
   deleteSession: (sessionId: string) => call<void>('nexus_delete_session', { sessionId }),
   getUsageInsights: (workspaceId?: string, agentId?: AgentId) => call<UsageInsights>('nexus_usage_insights', { workspaceId: workspaceId ?? null, agentId: agentId ?? null }),
+  getAccount: () => call<AccountProfile>('nexus_get_account'),
+  switchAccountTier: (tier: AccountTier) => call<AccountProfile>('nexus_switch_account_tier', { tier }),
+  listSyncDevices: () => call<SyncDeviceSummary[]>('nexus_list_sync_devices'),
+  triggerSync: () => call<SyncCycleResult>('nexus_trigger_sync'),
+  resolveSyncConflict: (conflictId: string, strategy: ConflictResolutionStrategy) =>
+    call<void>('nexus_resolve_sync_conflict', { conflictId, strategy }),
+  exportAccountBundle: () => call<string>('nexus_export_account_bundle'),
+  purgeCloudSync: () => call<number>('nexus_purge_cloud_sync'),
 };

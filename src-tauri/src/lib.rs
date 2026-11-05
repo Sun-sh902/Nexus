@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::Manager;
+mod accounts;
 mod actions;
 mod adapters;
 mod ai_doctor;
@@ -26,6 +27,7 @@ mod scenario_tests;
 mod secrets;
 mod sessions;
 mod store;
+mod sync;
 mod usage_insights;
 mod workspaces;
 
@@ -81,7 +83,14 @@ pub fn run() {
             ipc::nexus_list_sessions,
             ipc::nexus_resume_session,
             ipc::nexus_delete_session,
-            ipc::nexus_usage_insights
+            ipc::nexus_usage_insights,
+            ipc::nexus_get_account,
+            ipc::nexus_switch_account_tier,
+            ipc::nexus_list_sync_devices,
+            ipc::nexus_trigger_sync,
+            ipc::nexus_resolve_sync_conflict,
+            ipc::nexus_export_account_bundle,
+            ipc::nexus_purge_cloud_sync
         ])
         .setup(|app| {
             // Nexus-owned data lives in the per-app data directory, never inside Agent folders.

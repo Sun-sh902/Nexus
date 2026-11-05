@@ -452,6 +452,75 @@ pub async fn nexus_usage_insights(
         .map_err(|_| NexusError::new("app.task_failed"))?
 }
 
+#[tauri::command]
+pub fn nexus_get_account(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> NexusResult<crate::accounts::AccountProfile> {
+    main_window(&window)?;
+    state.get_account()
+}
+
+#[tauri::command]
+pub fn nexus_switch_account_tier(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    tier: String,
+) -> NexusResult<crate::accounts::AccountProfile> {
+    main_window(&window)?;
+    bounded(&tier, 32)?;
+    state.switch_account_tier(&tier)
+}
+
+#[tauri::command]
+pub fn nexus_list_sync_devices(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> NexusResult<Vec<crate::sync::SyncDeviceSummary>> {
+    main_window(&window)?;
+    state.list_sync_devices()
+}
+
+#[tauri::command]
+pub fn nexus_trigger_sync(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> NexusResult<crate::sync::SyncCycleResult> {
+    main_window(&window)?;
+    state.trigger_sync()
+}
+
+#[tauri::command]
+pub fn nexus_resolve_sync_conflict(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    conflict_id: String,
+    strategy: String,
+) -> NexusResult<()> {
+    main_window(&window)?;
+    bounded(&conflict_id, 128)?;
+    bounded(&strategy, 32)?;
+    state.resolve_sync_conflict(&conflict_id, &strategy)
+}
+
+#[tauri::command]
+pub fn nexus_export_account_bundle(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> NexusResult<String> {
+    main_window(&window)?;
+    state.export_account_bundle()
+}
+
+#[tauri::command]
+pub fn nexus_purge_cloud_sync(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> NexusResult<usize> {
+    main_window(&window)?;
+    state.purge_cloud_sync()
+}
+
 #[cfg(test)]
 pub const COMMANDS: &[&str] = &[
     "nexus_overview",
@@ -482,6 +551,13 @@ pub const COMMANDS: &[&str] = &[
     "nexus_resume_session",
     "nexus_delete_session",
     "nexus_usage_insights",
+    "nexus_get_account",
+    "nexus_switch_account_tier",
+    "nexus_list_sync_devices",
+    "nexus_trigger_sync",
+    "nexus_resolve_sync_conflict",
+    "nexus_export_account_bundle",
+    "nexus_purge_cloud_sync",
 ];
 
 #[cfg(test)]
