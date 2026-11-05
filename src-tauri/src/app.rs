@@ -994,6 +994,46 @@ impl App {
         let store = self.store()?;
         store.delete_workspace(id)
     }
+
+    pub fn consult_ai_doctor(
+        &self,
+        agent_id: AgentId,
+    ) -> NexusResult<crate::ai_doctor::AiDoctorConsultation> {
+        let overview = self.overview(false)?;
+        let agent_view = overview
+            .agents
+            .iter()
+            .find(|a| a.snapshot.agent_id == agent_id)
+            .ok_or_else(|| NexusError::new("ai_doctor.agent_not_found"))?;
+
+        let (backups, operations, desired_assignment) = {
+            let store = self.store()?;
+            let backups = store.backups(Some(agent_id))?;
+            let operations = store.operations(50)?;
+            let desired = store.assignment(agent_id)?.and_then(|a| a.model_id);
+            (backups, operations, desired)
+        };
+
+        let interrupted: Vec<OperationRecord> = operations
+            .into_iter()
+            .filter(|o| {
+                o.status == "interrupted" && o.agent_id.as_deref() == Some(agent_id.as_str())
+            })
+            .collect();
+
+        Ok(crate::ai_doctor::consult(
+            &crate::ai_doctor::AiDoctorInputs {
+                agent_id,
+                snapshot: &agent_view.snapshot,
+                health: &agent_view.health,
+                findings: &agent_view.findings,
+                backups: &backups,
+                interrupted: &interrupted,
+                desired_assignment: desired_assignment.as_deref(),
+                host: &self.ctx,
+            },
+        ))
+    }
 }
 
 #[cfg(all(test, unix))]

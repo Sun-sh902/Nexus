@@ -379,6 +379,19 @@ pub async fn nexus_launch_workspace(
         .map_err(|_| NexusError::new("app.task_failed"))?
 }
 
+#[tauri::command]
+pub async fn nexus_consult_ai_doctor(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    agent_id: AgentId,
+) -> NexusResult<crate::ai_doctor::AiDoctorConsultation> {
+    main_window(&window)?;
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.consult_ai_doctor(agent_id))
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
+}
+
 #[cfg(test)]
 pub const COMMANDS: &[&str] = &[
     "nexus_overview",
@@ -404,6 +417,7 @@ pub const COMMANDS: &[&str] = &[
     "nexus_create_workspace",
     "nexus_delete_workspace",
     "nexus_launch_workspace",
+    "nexus_consult_ai_doctor",
 ];
 
 #[cfg(test)]

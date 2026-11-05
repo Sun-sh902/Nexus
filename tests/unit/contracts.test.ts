@@ -63,7 +63,7 @@ describe('native scope (Phases 2–7 core backend)', () => {
   it('grants the main window only typed Nexus commands, with no broad core/plugin grants', () => {
     const capability = JSON.parse(readFileSync('src-tauri/capabilities/main.json', 'utf8'));
     expect(capability.windows).toEqual(['main']);
-    const nexus = ['overview', 'agent-history', 'models', 'create-provider', 'set-provider-secret', 'delete-provider', 'check-provider', 'create-model', 'delete-model', 'save-profile', 'delete-profile', 'set-assignment', 'prepare-action', 'confirm-plan', 'discard-plan', 'launch-agent', 'storage-status', 'prune-history', 'diagnostic-preview', 'list-workspaces', 'create-workspace', 'delete-workspace', 'launch-workspace'];
+    const nexus = ['overview', 'agent-history', 'models', 'create-provider', 'set-provider-secret', 'delete-provider', 'check-provider', 'create-model', 'delete-model', 'save-profile', 'delete-profile', 'set-assignment', 'prepare-action', 'confirm-plan', 'discard-plan', 'launch-agent', 'storage-status', 'prune-history', 'diagnostic-preview', 'list-workspaces', 'create-workspace', 'delete-workspace', 'launch-workspace', 'consult-ai-doctor'];
     expect(capability.permissions).toEqual(['allow-app-metadata', 'allow-apply-app-preferences', ...nexus.map(name => `allow-nexus-${name}`)]);
     for (const permission of capability.permissions as string[]) expect(permission).not.toMatch(/:|shell|fs-|http|dialog|process|execute|write-file|fetch/);
     expect(capability.remote).toBeUndefined();

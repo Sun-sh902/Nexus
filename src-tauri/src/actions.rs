@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 pub const PLAN_TTL_SECS: i64 = 600;
 const MAX_PLANS: usize = 32;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",

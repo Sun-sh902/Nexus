@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { backend, liveBackend, NexusError, type CreateWorkspaceRequest, type ModelsView, type Overview, type WorkspaceView } from './backend';
+import { backend, liveBackend, NexusError, type AgentId, type CreateWorkspaceRequest, type ModelsView, type Overview, type WorkspaceView } from './backend';
 import { agentView, activityViews, toolViews } from '../data/live';
-import { demoActivity, demoAgents, demoExtensions, demoTools, demoWorkspaces } from '../data/demo';
+import { demoActivity, demoAgents, demoAiDoctor, demoExtensions, demoTools, demoWorkspaces } from '../data/demo';
 import { NexusContext, type DataMode, type NexusData } from './nexus-context';
 
 // Single data boundary for pages. Inside the desktop runtime every value comes from Rust; the
@@ -97,6 +97,13 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     return `op_mock_launch_${id}`;
   }, [mode]);
 
+  const consultAiDoctor = useCallback(async (agentId: AgentId) => {
+    if (mode === 'live') {
+      return await backend.consultAiDoctor(agentId);
+    }
+    return demoAiDoctor(agentId);
+  }, [mode]);
+
   // Deferred so the scan's state updates never run synchronously inside the effect body.
   useEffect(() => { void Promise.resolve().then(() => load(true)); }, [load]);
 
@@ -127,9 +134,10 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       createWorkspace,
       deleteWorkspace,
       launchWorkspace,
+      consultAiDoctor,
       findAgent: (id: string) => agents.find(agent => agent.id === id),
     };
-  }, [mode, status, error, overview, workspaces, refreshing, load, models, modelsError, reloadModels, reloadWorkspaces, createWorkspace, deleteWorkspace, launchWorkspace]);
+  }, [mode, status, error, overview, workspaces, refreshing, load, models, modelsError, reloadModels, reloadWorkspaces, createWorkspace, deleteWorkspace, launchWorkspace, consultAiDoctor]);
   return <NexusContext.Provider value={value}>{children}</NexusContext.Provider>;
 }
 

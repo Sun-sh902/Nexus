@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tauri::Manager;
 mod actions;
 mod adapters;
+mod ai_doctor;
 mod app;
 mod app_preferences;
 mod backup;
@@ -73,7 +74,8 @@ pub fn run() {
             ipc::nexus_list_workspaces,
             ipc::nexus_create_workspace,
             ipc::nexus_delete_workspace,
-            ipc::nexus_launch_workspace
+            ipc::nexus_launch_workspace,
+            ipc::nexus_consult_ai_doctor
         ])
         .setup(|app| {
             // Nexus-owned data lives in the per-app data directory, never inside Agent folders.

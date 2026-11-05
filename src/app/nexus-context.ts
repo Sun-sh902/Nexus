@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { CreateWorkspaceRequest, ModelsView, NexusError, Overview, WorkspaceView } from './backend';
+import type { AgentId, AiDoctorConsultation, CreateWorkspaceRequest, ModelsView, NexusError, Overview, WorkspaceView } from './backend';
 import type { ActivityView, AgentView, ExtensionView, Text, ToolView } from '../data/view';
 
 export type DataMode = 'live' | 'demo';
@@ -24,6 +24,7 @@ export interface NexusData {
   createWorkspace: (req: CreateWorkspaceRequest) => Promise<WorkspaceView>;
   deleteWorkspace: (id: string) => Promise<void>;
   launchWorkspace: (id: string) => Promise<string>;
+  consultAiDoctor: (agentId: AgentId) => Promise<AiDoctorConsultation>;
   findAgent: (id: string) => AgentView | undefined;
 }
 

@@ -86,6 +86,45 @@ export interface CreateWorkspaceRequest {
   modelId?: string;
   profileId?: string;
 }
+
+export type ConfidenceLevel = 'high' | 'medium' | 'low';
+
+export interface ProbableCause {
+  rank: number;
+  category: string;
+  cause: string;
+  confidence: ConfidenceLevel;
+  evidenceSnippet: string;
+}
+
+export interface AiDoctorRecommendation {
+  id: string;
+  title: string;
+  rationale: string;
+  riskAssessment: string;
+  action: ActionRequest | null;
+}
+
+export interface HealthRadarStage {
+  id: string;
+  label: string;
+  outcome: 'pass' | 'fail' | 'unknown' | 'notApplicable';
+  summary: string;
+  checkIds: string[];
+}
+
+export interface AiDoctorConsultation {
+  agentId: AgentId;
+  consultedAt: string;
+  overallSeverity: 'healthy' | 'advisory' | 'critical';
+  confidenceScore: number;
+  analysisSummary: string;
+  radarStages: HealthRadarStage[];
+  rankedCauses: ProbableCause[];
+  recommendations: AiDoctorRecommendation[];
+  redactionNotice: string;
+  disclaimer: string;
+}
 export interface ConfigEdit { targetId: string; location: string; format: string; createsFile: boolean; beforeFingerprint: string | null; afterFingerprint: string; changes: { key: string; before: string | null; after: string | null }[]; diff: { kind: '+' | '-'; text: string }[] }
 export interface PlanView {
   id: string; digest: string; kind: string; agentId: AgentId | null; createdAt: string; expiresAt: string; params: Pairs;
@@ -163,4 +202,5 @@ export const backend = {
   createWorkspace: (request: CreateWorkspaceRequest) => call<WorkspaceView>('nexus_create_workspace', { request }),
   deleteWorkspace: (workspaceId: string) => call<void>('nexus_delete_workspace', { workspaceId }),
   launchWorkspace: (workspaceId: string) => call<string>('nexus_launch_workspace', { workspaceId }),
+  consultAiDoctor: (agentId: AgentId) => call<AiDoctorConsultation>('nexus_consult_ai_doctor', { agentId }),
 };

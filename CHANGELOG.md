@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0 — 2026-11-05 (Breakthrough: Phase 9 AI Doctor & Visual Health Radar)
+
+Major breakthrough release delivering Phase 9 AI Doctor and the 7-Stage Visual Health Radar, transforming Project Nexus into an intelligent, privacy-preserving self-healing lifecycle copilot.
+
+### Added
+- **AI Doctor Expert Reasoning Engine (Phase 9)**: Local, deterministic expert reasoning engine that analyzes live Agent health telemetry, configuration integrity, model drift, and operation journals without remote script execution, AI hallucinations, or cloud dependencies.
+- **100% In-Memory Privacy Redaction**: All filesystem paths, usernames, environment variables, and authentication tokens are scrubbed via `crate::core::redact` before synthesis; zero plaintext secrets are ever exposed.
+- **Ranked Probable Causes & Grounded Confidence**: Diagnostic findings are ranked by impact and certainty (`High`, `Medium`, `Low`) with concrete redacted evidence snippets and mathematical confidence scoring (e.g., 96% Grounded Confidence).
+- **Verified Safe Repairs with 1-Click Native Confirmation**: Recommendations map strictly to allowlisted, typed `ActionRequest` variants (`restoreBackup`, `applyModel`, `recoverInstall`, `setMcpEnabled`). Triggering repairs feeds directly into the native OS confirmation dialog via `useActionFlow` with zero arbitrary execution.
+- **7-Stage Visual Health Radar (`HealthRadar.tsx`)**: High-fidelity signal bus component visualizing the end-to-end readiness pipeline: `Runtime` ──▶ `Toolchain` ──▶ `Config` ──▶ `Auth` ──▶ `Model` ──▶ `Extensions` ──▶ `Network`, featuring status indicators and an interactive telemetry inspector.
+- **Interactive AI Doctor Panel (`AiDoctorPanel.tsx`)**: Embedded on the Agent Detail Diagnostics tab with live scanning animation, health state badges, root-cause breakdowns, and 1-click repair actions.
+- **Typed IPC Command & Allowlist**: Registered and allowlisted `nexus_consult_ai_doctor` across Tauri capabilities, build manifest, and contract tests.
+
 ## 0.4.0 — 2026-11-05 (Breakthrough: Phase 8 Project Workspaces)
 
 Major milestone delivering Phase 8 Project Workspaces, bringing context-aware Agent environments, instruction discovery, and safe terminal launch to Project Nexus.

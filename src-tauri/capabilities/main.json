@@ -30,6 +30,7 @@
     "allow-nexus-list-workspaces",
     "allow-nexus-create-workspace",
     "allow-nexus-delete-workspace",
-    "allow-nexus-launch-workspace"
+    "allow-nexus-launch-workspace",
+    "allow-nexus-consult-ai-doctor"
   ]
 }

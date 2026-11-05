@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, ChevronDown, Play } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { backend, pairs, type AgentHistory, type Finding } from '../app/backend';
+import { backend, pairs, type AgentHistory, type AgentId, type Finding } from '../app/backend';
 import { useNexus, useText } from '../app/nexus-context';
 import { usePreferences } from '../app/preference-context';
 import { formatNumber, formatTimestamp } from '../app/format';
@@ -12,6 +12,7 @@ import { HealthCheckList, HealthEvidence, NotChecked } from '../components/Healt
 import { ExtensionRows } from '../components/ExtensionRows';
 import { ReadinessProcession } from '../components/ReadinessLine';
 import { ActionPanel } from '../components/ActionFlow';
+import { AiDoctorPanel } from '../components/AiDoctorPanel';
 import { useActionFlow, type ActionFlow } from '../app/action-flow';
 import { DataState, EmptyState, ErrorState, InfoList, Kicker, Notice, Seal, Section, Tabs } from '../components/ui';
 
@@ -264,6 +265,7 @@ function Diagnostics({ agent, flow }: { agent: AgentView; flow: ActionFlow }) {
   const text = useText();
   if (agent.report) {
     return <div className="diagnostics-area"><p className="view-intro">{t('helpLive')}</p>
+      <AiDoctorPanel agentId={agent.id as AgentId} />
       {agent.findings.length ? agent.findings.map(f => <FindingSheet key={f.id} agent={agent} finding={f} flow={flow} />) : <Notice tone="success"><strong>{t('noFindingsLive')}</strong><p>{t('noFindingsHelpLive')}</p></Notice>}
       <ActionPanel flow={flow} />
       <details><summary>{t('agents:liveAllChecks')}</summary><HealthCheckList agent={agent} /></details>
@@ -271,7 +273,9 @@ function Diagnostics({ agent, flow }: { agent: AgentView; flow: ActionFlow }) {
     </div>;
   }
   const finding = agent.readiness === 'attention' || agent.readiness === 'blocked';
-  return <div className="diagnostics-area"><p className="view-intro">{t('help')}</p>{finding ? <section className={`sheet finding state-${agent.readiness}`} aria-labelledby="finding-title">
+  return <div className="diagnostics-area"><p className="view-intro">{t('help')}</p>
+    <AiDoctorPanel agentId={agent.id as AgentId} />
+    {finding ? <section className={`sheet finding state-${agent.readiness}`} aria-labelledby="finding-title">
     <div className="finding-summary"><Seal state={agent.readiness} /><h2 id="finding-title">{text(agent.headline)}</h2><p><span className="field-label">{t('impact')}</span>{t(`${agent.id}Impact`)}</p></div>
     <dl className="comparison">
       <div><dt className="kicker">{t('observed')}</dt><dd className="mono">{t(`${agent.id}Observed`)}</dd></div>

@@ -1,6 +1,6 @@
 import { activity, agents, extensions, findModel, findProfile, findProvider, models, profiles, providers, system, type AgentFixture } from './fixtures';
 import type { ActivityView, AgentView, ExtensionView, NodeKey, NodeState, Text, ToolView } from './view';
-import type { WorkspaceView } from '../app/backend';
+import type { AgentId, AiDoctorConsultation, WorkspaceView } from '../app/backend';
 
 // Explicit demo mode only (browser preview, UI tests). Reuses the original Phase 1 fixture
 // strings so the approved demo reads exactly as before.
@@ -97,3 +97,46 @@ export const demoWorkspaces = (): WorkspaceView[] => [
     lastOpenedAt: '2026-11-05T06:00:00Z',
   },
 ];
+
+export const demoAiDoctor = (agentId: AgentId): AiDoctorConsultation => ({
+  agentId,
+  consultedAt: '2026-11-05T07:30:00Z',
+  overallSeverity: agentId === 'codex' ? 'advisory' : 'healthy',
+  confidenceScore: 0.96,
+  analysisSummary: agentId === 'codex'
+    ? 'Agent Codex is operational with 1 advisory warning. Recommended Model Profile assignment is available.'
+    : `Agent ${agentId} is completely healthy and ready to work. All 7 lifecycle stages are synchronized and verified.`,
+  radarStages: [
+    { id: 'runtime', label: 'Runtime Environment', outcome: 'pass', summary: 'Runtime Environment verified and operational', checkIds: ['platform.supported', 'runtime.prerequisite'] },
+    { id: 'toolchain', label: 'Toolchain & Binary', outcome: 'pass', summary: 'Toolchain & Binary verified and operational', checkIds: ['install.present', 'install.executable', 'install.version'] },
+    { id: 'config', label: 'Config & Integrity', outcome: 'pass', summary: 'Config & Integrity verified and operational', checkIds: ['config.unambiguous'] },
+    { id: 'auth', label: 'Auth & Tokens', outcome: 'pass', summary: 'Auth & Tokens verified and operational', checkIds: ['auth.evidence'] },
+    { id: 'model', label: 'Model & Drift', outcome: agentId === 'codex' ? 'unknown' : 'pass', summary: agentId === 'codex' ? 'Model & Drift state unverified' : 'Model & Drift verified and operational', checkIds: ['model.effective', 'model.drift'] },
+    { id: 'extensions', label: 'MCP & Skills', outcome: 'pass', summary: 'MCP & Skills verified and operational', checkIds: ['extensions.mcp', 'extensions.skills'] },
+    { id: 'network', label: 'Provider & Network', outcome: 'pass', summary: 'Provider & Network verified and operational', checkIds: ['network.reachability'] },
+  ],
+  rankedCauses: [
+    {
+      rank: 1,
+      category: agentId === 'codex' ? 'ModelAssignment' : 'Readiness',
+      cause: agentId === 'codex'
+        ? 'Effective agent model has drifted from the assigned Model Profile.'
+        : 'All 7 lifecycle stages (Runtime, Toolchain, Config, Auth, Model, Extensions, Network) are verified.',
+      confidence: 'high',
+      evidenceSnippet: agentId === 'codex'
+        ? 'Effective: gpt-4o, Desired: o3-mini'
+        : 'Zero configuration drift and complete prerequisite coverage observed.',
+    },
+  ],
+  recommendations: agentId === 'codex' ? [
+    {
+      id: 'rec_apply_model_codex',
+      title: 'Apply desired Model Profile',
+      rationale: 'Synchronizes the local agent configuration with your designated Model Profile.',
+      riskAssessment: 'Low (Modifies model field only)',
+      action: { kind: 'applyModel', agentId: 'codex' },
+    },
+  ] : [],
+  redactionNotice: '100% of sensitive paths, tokens, and credentials were scrubbed locally before analysis.',
+  disclaimer: 'AI Doctor recommendations map strictly to allowlisted native actions. Native confirmation is required before any state changes.',
+});

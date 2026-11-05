@@ -1,6 +1,6 @@
 # Backend implementation progress (Phases 2–7 core backend)
 
-Status date: 2026-11-05. Version `0.4.0` (`v0.4.0`). This is the resumable record for the
+Status date: 2026-11-05. Version `0.5.0` (`v0.5.0`). This is the resumable record for the
 Core Backend Beta Candidate program. It records what exists and what was verified; it does not
 claim anything that was not executed. Product authority remains [PRD](PRD.md); sequencing remains
 [ROADMAP](ROADMAP.md).
@@ -238,6 +238,17 @@ Breakthrough release delivering Phase 8 Project Workspaces, elevating Nexus into
 - **Home UI integration**: `WorkspaceSection` card grid on the Home page with branch chips, active agent badges, instruction tags, one-click terminal launcher, and inline registration form.
 - **Verification (2026-11-05, macOS arm64)**: `cargo test --locked` → **147 passed, 0 failed, 3 ignored**; `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint` → 0 errors; `pnpm test` (Vitest) → 15 passed; `pnpm test:ui` (Playwright + `axe`) → 33 passed; `pnpm build` → pass.
 
+## Phase 9 AI Doctor & Visual Health Radar Delivery (`0.5.0`, 2026-11-05)
+
+Breakthrough release delivering Phase 9 AI Doctor and 7-Stage Visual Health Radar:
+- **Local expert reasoning engine (`ai_doctor.rs`)**: in-memory, deterministic diagnosis analyzing Agent health telemetry, configuration syntax, model assignment drift, and interrupted operations without remote script execution or cloud telemetry.
+- **100% Privacy redaction guarantee**: all filesystem paths, usernames, environment variables, and authentication tokens are scrubbed via `crate::core::redact` before synthesis; zero plaintext secrets are ever exposed.
+- **Ranked probable causes & grounded confidence**: diagnostic findings are ranked by impact and certainty (`High`, `Medium`, `Low`) with concrete redacted evidence snippets and mathematical confidence scoring (e.g., 96% Grounded Confidence).
+- **Verified safe repairs with 1-click native confirmation**: recommendations map strictly to allowlisted `ActionRequest` variants (`restoreBackup`, `applyModel`, `recoverInstall`, `setMcpEnabled`). Triggering repairs feeds directly into the native OS confirmation dialog via `useActionFlow`.
+- **7-Stage Visual Health Radar (`HealthRadar.tsx`)**: signal bus component visualizing the end-to-end readiness pipeline: `Runtime` ──▶ `Toolchain` ──▶ `Config` ──▶ `Auth` ──▶ `Model` ──▶ `Extensions` ──▶ `Network`, featuring status indicators and an interactive telemetry inspector.
+- **Interactive AI Doctor Panel (`AiDoctorPanel.tsx`)**: embedded on the Agent Detail Diagnostics tab with live scanning animation, health state badges, root-cause breakdowns, and 1-click repair actions.
+- **Verification (2026-11-05, macOS arm64)**: `cargo test --locked` → **149 passed, 0 failed, 3 ignored**; `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint` → 0 errors; `pnpm test` (Vitest) → 17 passed; `pnpm test:ui` (Playwright + `axe`) → 33 passed; `pnpm build` → pass.
+
 ## Continuation point
 
-Phase 8 Project Workspaces delivered in version 0.4.0. Next canonical roadmap phase is Phase 9 AI Doctor (opt-in redacted evidence interpretation, probable-cause ranking, and recommendations for existing registered actions).
+Phase 9 AI Doctor delivered in version 0.5.0. Next canonical roadmap phase is Phase 10 Session Continuity & contextual usage/cost insights.
