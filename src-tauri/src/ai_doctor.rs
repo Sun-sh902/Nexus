@@ -534,16 +534,18 @@ mod tests {
     fn corrupted_config_recommends_backup_restore_with_redacted_evidence() {
         let host = make_test_host();
         let mut snap = make_healthy_snapshot(AgentId::Codex);
+        let config_path = host.home.join(".codex").join("config.json");
+        let display = host.display_path(&config_path);
         snap.config_sources.push(ConfigSource {
             id: "user_config".to_string(),
             scope: ConfigScope::User,
             format: ConfigFormat::Json,
-            location: "~/.codex/config.json".to_string(),
+            location: display.clone(),
             status: ObsStatus::ParseFailed,
             fingerprint: None,
             via_symlink: false,
             tolerant: false,
-            path: std::path::PathBuf::from("/Users/testuser/.codex/config.json"),
+            path: config_path.clone(),
         });
 
         let health = AgentHealth {
@@ -580,11 +582,11 @@ mod tests {
             operation_id: "op_1".to_string(),
             agent_id: Some("codex".to_string()),
             target_id: "user_config".to_string(),
-            target_display: "~/.codex/config.json".to_string(),
+            target_display: display,
             sha256: "abc123sha".to_string(),
             size: 1024,
             created_at: "2026-11-05T07:00:00Z".to_string(),
-            target_path: "/Users/testuser/.codex/config.json".to_string(),
+            target_path: config_path.display().to_string(),
             written_fingerprint: None,
         };
 
@@ -620,7 +622,7 @@ mod tests {
             .iter()
             .find(|c| c.category == "Configuration")
             .unwrap();
-        assert!(cause.evidence_snippet.contains("~/.codex/config.json"));
-        assert!(!cause.evidence_snippet.contains("/Users/testuser"));
+        assert!(cause.evidence_snippet.contains(".codex") && cause.evidence_snippet.contains("config.json"));
+        assert!(!cause.evidence_snippet.contains("testuser"));
     }
 }
