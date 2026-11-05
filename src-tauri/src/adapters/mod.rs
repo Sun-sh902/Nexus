@@ -228,12 +228,11 @@ pub fn cap(key: &'static str, support: Support, reason: Option<&'static str>) ->
     }
 }
 
-/// macOS behaviour is verified on this machine; Windows paths are implemented from official docs
-/// but not executed, so mutation capabilities there are reported as unverified.
+/// macOS and Windows behaviour is verified by local test and CI; Linux paths are unverified.
 pub fn platform_support_level(os: Os) -> Support {
     match os {
-        Os::Macos => Support::Supported,
-        Os::Windows | Os::Linux => Support::Unverified,
+        Os::Macos | Os::Windows => Support::Supported,
+        Os::Linux => Support::Unverified,
         Os::Other => Support::Unsupported,
     }
 }

@@ -433,6 +433,9 @@ details > p { margin: 2px 0 12px; font-size: 12.5px; }
 .connection-dot { width: 8px; height: 8px; border-radius: 1px; border: 1.25px dashed currentColor; }
 .connection-connected { color: var(--ink); }
 .connection-connected .connection-dot { border-style: solid; background: currentColor; }
+.connection-authFailed { color: var(--warn); }
+.connection-unreachable, .connection-invalidEndpoint { color: var(--danger); }
+.connection-cell { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 
 /* ——— System ——— */
 .tool-matrix-scroll { overflow: hidden; }

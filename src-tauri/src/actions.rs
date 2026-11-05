@@ -1018,24 +1018,22 @@ impl App {
                 let applied = transaction::apply(edit, &self.vault, &mut |step, backup| {
                     if let (Step::BackedUp, Some(b)) = (step, backup) {
                         backup_id = Some(b.id.clone());
-                        if let Ok(store) = self.store() {
-                            let _ = store.insert_backup(
-                                &b.id,
-                                &op_id,
-                                agent,
-                                &edit.target_id,
-                                &edit.path.to_string_lossy(),
-                                &edit.location,
-                                &b.sha256,
-                                b.size,
-                                Instant::now(),
-                            );
-                        }
+                        let store = self.store()?;
+                        store.insert_backup(
+                            &b.id,
+                            &op_id,
+                            agent,
+                            &edit.target_id,
+                            &edit.path.to_string_lossy(),
+                            &edit.location,
+                            &b.sha256,
+                            b.size,
+                            Instant::now(),
+                        )?;
                     }
-                    if let Ok(store) = self.store() {
-                        let _ =
-                            store.step(&op_id, &format!("{step:?}").to_lowercase(), Instant::now());
-                    }
+                    let store = self.store()?;
+                    store.step(&op_id, &format!("{step:?}").to_lowercase(), Instant::now())?;
+                    Ok(())
                 });
                 result.backup_id = backup_id.clone();
                 let applied = match applied {

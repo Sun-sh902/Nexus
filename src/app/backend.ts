@@ -30,6 +30,7 @@ export interface AgentHealth { agentId: AgentId; readiness: Readiness; checks: H
 export interface RepairOption { action: string; params: Pairs }
 export interface Finding { id: string; code: string; agentId: AgentId; checkId: string | null; severity: 'blocking' | 'warning' | 'unknown'; cause: 'established' | 'possible'; params: Pairs; evidence: string[]; observedAt: string; stale: boolean; repairs: RepairOption[]; manual: string | null }
 export interface ProviderProfile { id: string; displayName: string; kind: string; baseUrl: string | null; authMode: 'agentLogin' | 'nexusSecret' | 'environment'; secretRef: string | null; secretPresent: boolean | null; envVar: string | null; revision: number; builtin: boolean; connection: string }
+export interface ProviderReachabilityResult { providerId: string; status: 'connected' | 'authFailed' | 'unreachable' | 'invalidEndpoint' | 'notConfigured'; httpStatus?: number; latencyMs?: number; message: string; modelsDiscovered: string[] }
 export interface ModelDefinition { id: string; providerId: string; identifier: string; displayName: string | null; source: 'builtin' | 'observed' | 'manual'; sourceDetail: string | null; capabilities: { key: string; state: string; source: string }[] }
 export interface ModelProfile { id: string; name: string; revision: number; modelId: string; reasoning: string | null }
 export interface Compatibility { agentId: AgentId; support: Support; reason: string | null; nativeIdentifier: string | null }
@@ -105,6 +106,7 @@ export const backend = {
   createProvider: (input: { name: string; kind: string; baseUrl?: string; authMode: string; envVar?: string }) => call<ProviderProfile>('nexus_create_provider', { input }),
   setProviderSecret: (providerId: string, secret: string) => call<void>('nexus_set_provider_secret', { input: { providerId, secret } }),
   deleteProvider: (providerId: string) => call<void>('nexus_delete_provider', { providerId }),
+  checkProvider: (providerId: string) => call<ProviderReachabilityResult>('nexus_check_provider', { providerId }),
   createModel: (input: { providerId: string; identifier: string; displayName?: string }) => call<ModelDefinition>('nexus_create_model', { input }),
   deleteModel: (modelId: string) => call<void>('nexus_delete_model', { modelId }),
   saveProfile: (input: { id?: string; name: string; modelId: string; reasoning?: string }) => call<ModelProfile>('nexus_save_profile', { input }),

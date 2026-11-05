@@ -208,6 +208,16 @@ Owner decision: the product ships in English only. Removed the zh-CN catalog, th
 - **Lifecycle, observability & retention**: `nexus_delete_profile` (`profile.in_use` guard) + Profile revision impact UI in `Models.tsx`; per-Agent operation & readiness history in `AgentDetail.tsx`; Settings local storage metrics (`nexus_storage_status`), bounded retention pruning (`nexus_prune_history`), and preview-required redacted diagnostic export (`nexus_diagnostic_preview`).
 - **Verification (2026-11-03, macOS arm64)**: `cargo test --locked` → **134 passed, 0 failed, 3 ignored** (`real_machine_discovery_smoke` and `export_live_ui_fixture` also executed and green); `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint src tests scripts` → 0 errors; `pnpm test` (Vitest) → 15 passed; `pnpm test:ui` (Playwright + `axe`) → 33 passed; `pnpm build` → pass. Added `.github/workflows/ci.yml` for macOS + Windows.
 
+## Iteration 2 Windows parity & Provider reachability (`0.2.2-beta.1`, 2026-11-05)
+
+- **Windows process & executable parity**: `is_executable_file` recognizes `.cmd` and `.bat` shims on Windows, enabling Windows `npm.cmd` execution in lifecycle operations.
+- **Windows filesystem safety**: `check_mutable_target` explicitly rejects Windows reparse points (`is_reparse_point`) in addition to symlinks; `check_owner` guards against mutating read-only targets on Windows.
+- **Windows global npm layout**: `npm_prefix_of` supports Windows `%AppData%/npm/node_modules/` layout in addition to Unix `/lib/node_modules/`.
+- **Fallible transaction journaling**: `config::transaction::apply` makes `on_step` fallible, ensuring any SQLite backup insertion or step logging failure stops before replacing files on disk (closes Gate I P3).
+- **Opt-in Provider reachability & credential verification**: user-initiated read-only check (`nexus_check_provider`) obeying Security §7 network controls (HTTPS enforced by default, plaintext HTTP strictly confined to loopback addresses, 0 redirects, cloud metadata blocked, 5-second timeout, 64 KiB read limit, no prompt/project data sent).
+- **UI & models**: live connection badge ("Connected", "Auth failed", "Unreachable") with on-demand "Test connection" button and parsed model counts on the Models page.
+- **Verification (2026-11-05, macOS arm64)**: `cargo test --locked` → **140 passed, 0 failed, 3 ignored**; `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint` → 0 errors; `pnpm test` (Vitest) → 15 passed; `pnpm test:ui` (Playwright + `axe`) → 33 passed; `pnpm build` → pass.
+
 ## Continuation point
 
-All Phases 1–7 Iteration 1 hardening gates are green. Next steps toward a public Beta (Iteration 2 & Iteration 3 in [ROADMAP](ROADMAP.md)): Windows runtime validation (`.cmd` shims, Credential Manager, ACL checks for mutation), user-initiated online Provider validation with Security §7 network controls, local Skills install/remove, signed/notarized release and updater, usability sessions.
+All Phases 1–7 Iteration 1 and Iteration 2 gates are green. Next step toward the public Beta gate is Iteration 3 (`0.3.0-beta.1` in [ROADMAP](ROADMAP.md)): local Skills install/remove with traversal/executable disclosures, dual-platform code signing / notarization packaging pipeline, signed manifest verification drill, and public Beta sign-off.

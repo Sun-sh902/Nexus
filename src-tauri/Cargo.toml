@@ -1,6 +1,6 @@
 [package]
 name = "project-nexus"
-version = "0.2.1"
+version = "0.2.2"
 description = "Project Nexus — AI Agent Lifecycle Manager"
 license = "Apache-2.0"
 repository = "https://github.com/Sun-sh902/Nexus"
@@ -26,6 +26,8 @@ aes-gcm = "0.10"
 getrandom = "0.3"
 libc = "0.2"
 tauri-plugin-dialog = "2"
+ureq = "3"
+url = "2"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

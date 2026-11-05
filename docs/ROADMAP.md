@@ -161,7 +161,7 @@ Phases 2–7 core backend were authorized together and implemented as a Core Bac
 Sequenced path to complete Phase 7 public Beta (before any separately authorized Phase 8+ work):
 
 1. **Iteration 1 (`0.2.1-beta.1`, delivered 2026-11-03):** Security/freshness hardening, comment-preserving JSONC removal, structural restore checks, `nexus_managed` MCP hydration, reviewed local stdio MCP recipes, Model Profile deletion & revision impact UI, per-Agent operation/health history, Settings storage/retention pruning & redacted diagnostic export, and macOS + Windows CI.
-2. **Iteration 2 (`0.2.2-beta` target — Windows Parity & Opt-in Provider Check):** Windows interactive desktop validation, `.cmd` shim resolution and Windows ACL/reparse checks for safe mutation, Credential Manager end-to-end verification, and user-initiated read-only Provider reachability/credential check obeying Security §7 origin/redirect/timeout controls.
+2. **Iteration 2 (`0.2.2-beta.1`, delivered 2026-11-05):** Windows process `.cmd` shim resolution and reparse point mutation guards, Windows `%AppData%/npm` prefix support, fallible transaction journaling, and user-initiated read-only Provider reachability/credential verification (`nexus_check_provider`) obeying Security §7 origin/redirect/timeout controls with on-demand UI.
 3. **Iteration 3 (`0.3.0-beta.1` Public Beta Gate):** Local Skill folder installation/removal with traversal/symlink/executable-content disclosure, macOS Developer ID notarization + Windows Authenticode signing, signed Manifest/updater verification drill, and usability/accessibility sign-off across macOS and Windows.
 
 ## Phase 0 review and audit record

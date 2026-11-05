@@ -159,10 +159,13 @@ fn dir_ok(d: &std::path::Path) -> bool {
     }
 }
 
-/// The npm global prefix that owns an installation: `<prefix>/lib/node_modules/<pkg>/…`.
+/// The npm global prefix that owns an installation: `<prefix>/lib/node_modules/<pkg>/…` or
+/// Windows `%AppData%/npm/node_modules/<pkg>/...`.
 pub fn npm_prefix_of(resolved: &std::path::Path) -> Option<PathBuf> {
     let s = resolved.to_string_lossy().replace('\\', "/");
-    let idx = s.find("/lib/node_modules/")?;
+    let idx = s
+        .find("/lib/node_modules/")
+        .or_else(|| s.find("/node_modules/"))?;
     let prefix = PathBuf::from(&s[..idx]);
     prefix.is_absolute().then_some(prefix)
 }

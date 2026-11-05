@@ -33,6 +33,7 @@ pub struct App {
     pub confirmer: Box<dyn Confirmer>,
     cache: Mutex<Option<Overview>>,
     locale: Mutex<String>,
+    provider_statuses: Mutex<HashMap<String, crate::network::ProviderReachabilityResult>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -207,6 +208,7 @@ impl App {
             confirmer,
             cache: Mutex::new(None),
             locale: Mutex::new("en-US".into()),
+            provider_statuses: Mutex::new(HashMap::new()),
         })
     }
 
@@ -236,7 +238,45 @@ impl App {
             }
             out.push(p);
         }
+        if let Ok(lock) = self.provider_statuses.lock() {
+            for p in &mut out {
+                if let Some(status) = lock.get(&p.id) {
+                    p.connection = match status.status.as_str() {
+                        "connected" => "connected",
+                        "authFailed" => "authFailed",
+                        "unreachable" => "unreachable",
+                        "invalidEndpoint" => "invalidEndpoint",
+                        _ => "notTested",
+                    };
+                }
+            }
+        }
         Ok(out)
+    }
+
+    pub fn check_provider(
+        &self,
+        provider_id: &str,
+    ) -> NexusResult<crate::network::ProviderReachabilityResult> {
+        let providers = self.all_providers()?;
+        let p = providers
+            .iter()
+            .find(|p| p.id == provider_id)
+            .ok_or_else(|| NexusError::new("provider.not_found"))?;
+        let secret = if let Some(r) = &p.secret_ref {
+            self.secrets.get(r).ok().flatten()
+        } else {
+            None
+        };
+        let res = crate::network::check_provider_reachability(
+            &p.id,
+            p.base_url.as_deref(),
+            secret.as_deref(),
+        );
+        if let Ok(mut lock) = self.provider_statuses.lock() {
+            lock.insert(provider_id.to_string(), res.clone());
+        }
+        Ok(res)
     }
 
     pub fn all_models(&self, observed: &[ModelDefinition]) -> NexusResult<Vec<ModelDefinition>> {

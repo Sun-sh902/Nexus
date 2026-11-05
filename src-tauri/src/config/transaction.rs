@@ -26,11 +26,11 @@ pub struct Applied {
 }
 
 /// Applies an edit. `on_step` is called after each completed step so the caller can journal it
-/// before the next side effect.
+/// before the next side effect. If journaling fails, the transaction is refused before modification.
 pub fn apply(
     edit: &ConfigEdit,
     vault: &BackupVault,
-    on_step: &mut dyn FnMut(Step, Option<&BackupRef>),
+    on_step: &mut dyn FnMut(Step, Option<&BackupRef>) -> NexusResult<()>,
 ) -> NexusResult<Applied> {
     let exists = check_mutable_target(&edit.path)?;
     if exists != edit.before_fingerprint.is_some() {
@@ -44,23 +44,23 @@ pub fn apply(
     if current.as_ref().map(|c| c.fingerprint.as_str()) != edit.before_fingerprint.as_deref() {
         return Err(NexusError::new("config.concurrent_change"));
     }
-    on_step(Step::Prechecked, None);
+    on_step(Step::Prechecked, None)?;
     let backup = match &current {
         Some(read) => {
             let r = vault.protect(&read.bytes)?;
-            on_step(Step::BackedUp, Some(&r));
+            on_step(Step::BackedUp, Some(&r))?;
             Some(r)
         }
         None => None,
     };
     let written = atomic_replace(&edit.path, &edit.after, edit.before_fingerprint.as_deref())?;
-    on_step(Step::Written, backup.as_ref());
+    on_step(Step::Written, backup.as_ref())?;
     let reread_ok = read_bounded(&edit.path, MAX_CONFIG_BYTES)
         .map(|r| r.fingerprint == edit.after_fingerprint)
         .unwrap_or(false)
         && written == edit.after_fingerprint;
     if reread_ok {
-        on_step(Step::Reread, backup.as_ref());
+        on_step(Step::Reread, backup.as_ref())?;
     }
     Ok(Applied {
         backup,
@@ -155,7 +155,11 @@ mod tests {
         );
         let edit = plan_json_set(&read, &["model"], serde_json::json!("opus")).unwrap();
         let mut steps = Vec::new();
-        let applied = apply(&edit, &vault, &mut |s, _| steps.push(s)).unwrap();
+        let applied = apply(&edit, &vault, &mut |s, _| {
+            steps.push(s);
+            Ok(())
+        })
+        .unwrap();
         assert_eq!(
             steps,
             vec![
@@ -198,7 +202,7 @@ mod tests {
         let edit = plan_json_set(&read, &["model"], serde_json::json!("opus")).unwrap();
         std::fs::write(&path, "{\"theme\": \"light\"}").unwrap();
         assert_eq!(
-            apply(&edit, &vault, &mut |_, _| {}).unwrap_err().code,
+            apply(&edit, &vault, &mut |_, _| Ok(())).unwrap_err().code,
             "config.concurrent_change"
         );
         assert_eq!(
@@ -219,7 +223,7 @@ mod tests {
             false,
         );
         let edit = plan_json_set(&read, &["model"], serde_json::json!("opus")).unwrap();
-        let applied = apply(&edit, &vault, &mut |_, _| {}).unwrap();
+        let applied = apply(&edit, &vault, &mut |_, _| Ok(())).unwrap();
         std::fs::write(&path, "{\"model\": \"user-changed\"}").unwrap();
         assert_eq!(
             compensate(
@@ -252,7 +256,7 @@ mod tests {
         );
         let edit = plan_json_set(&read, &["model"], serde_json::json!("opus")).unwrap();
         assert_eq!(
-            apply(&edit, &vault, &mut |_, _| {}).unwrap_err().code,
+            apply(&edit, &vault, &mut |_, _| Ok(())).unwrap_err().code,
             "backup.secure_store_unavailable"
         );
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "{}");
@@ -270,12 +274,39 @@ mod tests {
             false,
         );
         let edit = plan_json_set(&read, &["model"], serde_json::json!("opus")).unwrap();
-        let applied = apply(&edit, &vault, &mut |_, _| {}).unwrap();
+        let applied = apply(&edit, &vault, &mut |_, _| Ok(())).unwrap();
         assert!(applied.backup.is_none() && path.exists());
         assert_eq!(
             compensate(&edit, &applied.written_fingerprint, &vault, None),
             Compensation::RolledBack
         );
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn journal_step_failure_stops_before_write() {
+        let (_d, path, vault, ctx) = setup(Some("{\"before\": true}"));
+        let read = read_config(
+            &ctx,
+            "s",
+            path.clone(),
+            ConfigScope::User,
+            ConfigFormat::Json,
+            false,
+        );
+        let edit = plan_json_set(&read, &["after"], serde_json::json!(true)).unwrap();
+        let err = apply(&edit, &vault, &mut |step, _| {
+            if step == Step::Prechecked {
+                Err(NexusError::new("store.step_failed"))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap_err();
+        assert_eq!(err.code, "store.step_failed");
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "{\"before\": true}"
+        );
     }
 }

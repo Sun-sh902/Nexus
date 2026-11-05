@@ -124,6 +124,17 @@ pub fn nexus_delete_provider(
     state.delete_provider(&provider_id)
 }
 
+#[tauri::command]
+pub fn nexus_check_provider(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    provider_id: String,
+) -> NexusResult<crate::network::ProviderReachabilityResult> {
+    main_window(&window)?;
+    bounded(&provider_id, 64)?;
+    state.check_provider(&provider_id)
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ModelInput {
@@ -326,6 +337,7 @@ pub const COMMANDS: &[&str] = &[
     "nexus_create_provider",
     "nexus_set_provider_secret",
     "nexus_delete_provider",
+    "nexus_check_provider",
     "nexus_create_model",
     "nexus_delete_model",
     "nexus_save_profile",

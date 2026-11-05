@@ -9,6 +9,7 @@ fn main() {
             "nexus_create_provider",
             "nexus_set_provider_secret",
             "nexus_delete_provider",
+            "nexus_check_provider",
             "nexus_create_model",
             "nexus_delete_model",
             "nexus_save_profile",

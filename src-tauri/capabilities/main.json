@@ -14,6 +14,7 @@
     "allow-nexus-create-provider",
     "allow-nexus-set-provider-secret",
     "allow-nexus-delete-provider",
+    "allow-nexus-check-provider",
     "allow-nexus-create-model",
     "allow-nexus-delete-model",
     "allow-nexus-save-profile",

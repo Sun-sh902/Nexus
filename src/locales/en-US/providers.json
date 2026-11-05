@@ -16,5 +16,11 @@
   "secretStored": "Credential stored",
   "secretMissing": "No credential stored",
   "secretUnknown": "Keychain unavailable",
-  "noSecretsLive": "Keys go straight to the system keychain. They are never shown, logged, stored in the database or sent anywhere by routine checks."
+  "noSecretsLive": "Keys go straight to the system keychain. They are never shown, logged, stored in the database or sent anywhere by routine checks.",
+  "testConnection": "Test connection",
+  "testingConnection": "Testing...",
+  "authFailed": "Auth failed (HTTP {{status}})",
+  "unreachable": "Unreachable",
+  "invalidEndpoint": "Invalid endpoint",
+  "modelsDiscovered": "{{count}} models discovered"
 }

@@ -18,6 +18,7 @@ mod keychain_selftest;
 mod lifecycle;
 mod models;
 mod native_confirm;
+mod network;
 mod platform;
 #[cfg(test)]
 mod scenario_tests;
@@ -55,6 +56,7 @@ pub fn run() {
             ipc::nexus_create_provider,
             ipc::nexus_set_provider_secret,
             ipc::nexus_delete_provider,
+            ipc::nexus_check_provider,
             ipc::nexus_create_model,
             ipc::nexus_delete_model,
             ipc::nexus_save_profile,

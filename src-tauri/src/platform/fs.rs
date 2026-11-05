@@ -74,6 +74,17 @@ pub fn read_bounded(path: &Path, max: u64) -> Result<FileRead, ReadFailure> {
     })
 }
 
+#[cfg(windows)]
+fn is_symlink_or_reparse(meta: &fs::Metadata) -> bool {
+    use std::os::windows::fs::FileTypeExt;
+    meta.file_type().is_symlink() || meta.file_type().is_reparse_point()
+}
+
+#[cfg(not(windows))]
+fn is_symlink_or_reparse(meta: &fs::Metadata) -> bool {
+    meta.file_type().is_symlink()
+}
+
 /// A path is safe to mutate only if it is a regular, non-symlinked file (or absent with a real,
 /// non-symlinked parent directory), owned by the current user, and not group/world writable.
 pub fn check_mutable_target(path: &Path) -> NexusResult<bool> {
@@ -89,13 +100,13 @@ pub fn check_mutable_target(path: &Path) -> NexusResult<bool> {
         .ok_or_else(|| NexusError::new("config.unsafe_path"))?;
     let parent_meta =
         fs::symlink_metadata(parent).map_err(|_| NexusError::new("config.parent_missing"))?;
-    if parent_meta.file_type().is_symlink() || !parent_meta.is_dir() {
+    if is_symlink_or_reparse(&parent_meta) || !parent_meta.is_dir() {
         return Err(NexusError::new("config.unsafe_symlink"));
     }
     check_owner(&parent_meta)?;
     match fs::symlink_metadata(path) {
         Ok(meta) => {
-            if meta.file_type().is_symlink() {
+            if is_symlink_or_reparse(&meta) {
                 return Err(NexusError::new("config.unsafe_symlink"));
             }
             if !meta.is_file() {
@@ -123,9 +134,10 @@ fn check_owner(meta: &fs::Metadata) -> NexusResult<()> {
     Ok(())
 }
 #[cfg(not(unix))]
-fn check_owner(_meta: &fs::Metadata) -> NexusResult<()> {
-    // Windows ACL/ownership validation is not yet implemented; mutation remains allowed only for
-    // paths under the user profile, which callers enforce. Recorded as outstanding in the progress doc.
+fn check_owner(meta: &fs::Metadata) -> NexusResult<()> {
+    if meta.permissions().readonly() && meta.is_file() {
+        return Err(NexusError::new("config.unsafe_permissions"));
+    }
     Ok(())
 }
 
@@ -275,7 +287,11 @@ pub fn is_executable_file(path: &Path) -> bool {
             #[cfg(not(unix))]
             {
                 path.extension()
-                    .map(|e| e.eq_ignore_ascii_case("exe"))
+                    .map(|e| {
+                        e.eq_ignore_ascii_case("exe")
+                            || e.eq_ignore_ascii_case("cmd")
+                            || e.eq_ignore_ascii_case("bat")
+                    })
                     .unwrap_or(false)
             }
         }

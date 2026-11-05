@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.2-beta.1 — 2026-11-05 (pre-release, Core Backend Beta Candidate)
+
+Iteration 2 release achieving Windows parity, Gate I review closure, and user-initiated Provider connectivity verification.
+
+### Added
+- **Opt-in Provider reachability & credential verification (`nexus_check_provider`)**: user-initiated read-only check obeying Security §7 network controls. HTTPS is enforced by default; plaintext HTTP is strictly confined to loopback addresses (`127.0.0.1`, `localhost`, `[::1]`). Redirects are disabled (0 redirects) to eliminate credential leakage across origins, cloud metadata endpoints (`169.254.169.254`, `metadata.google.internal`) are blocked, and requests time out at 5 seconds.
+- **Provider connection state & model discovery**: parses OpenAI/Ollama model lists up to 64 items into sanitized model definitions, measures live latency in milliseconds, and exposes live status ("connected", "authFailed", "unreachable") on the Models page with an on-demand "Test connection" button.
+- **Fallible transaction journaling**: `config::transaction::apply` now makes `on_step` fallible, ensuring any failure in SQLite backup insertion or step logging aborts before atomic file replacement on disk.
+
+### Fixed & Hardened
+- **Windows process & executable parity**: `is_executable_file` now recognizes `.cmd` and `.bat` shims on Windows, unblocking Windows `npm.cmd` execution.
+- **Windows filesystem safety**: `check_mutable_target` refuses mutation across Windows reparse points (`FileTypeExt::is_reparse_point`) in addition to symlinks; `check_owner` guards against mutating read-only files on Windows.
+- **Windows global npm layout**: `npm_prefix_of` supports Windows `%AppData%/npm/node_modules/` layout in addition to Unix `/lib/node_modules/`.
+- **Platform support level updated**: Windows discovery, health, and verified operations are promoted to `Supported` alongside macOS.
+
 ## 0.2.1-beta.1 — 2026-11-03 (pre-release, Core Backend Beta Candidate)
 
 Iteration 1 hardening release toward the Phase 7 public Beta gate. Closes security, freshness, comment-preservation, MCP management, Model Profile lifecycle, local retention, and redacted diagnostic export gaps while keeping Phases 1–7 boundaries intact.
