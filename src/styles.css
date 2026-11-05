@@ -678,7 +678,7 @@ button, a, select, summary { transition: background-color 110ms ease, border-col
 .workspace-branch { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-2); background: var(--sunken); padding: 2px 6px; border-radius: 3px; }
 .workspace-meta-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; }
 .instruction-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 7px; border-radius: 3px; background: var(--sunken); border: 1px solid var(--border-subtle); color: var(--ink-2); }
-.workspace-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.workspace-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
 .add-workspace-card { padding: 18px; border: 1px dashed var(--border); border-radius: 4px; background: var(--sunken); margin-top: 14px; }
 .add-workspace-card .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
 .add-workspace-card label { display: grid; gap: 4px; font-size: 12px; font-weight: 500; }

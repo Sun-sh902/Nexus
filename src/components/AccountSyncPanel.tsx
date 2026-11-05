@@ -94,9 +94,9 @@ export function AccountSyncPanel() {
 
       {/* Top Banner: Identity & Entitlements */}
       <section className="bg-card border border-border rounded-lg p-5 shadow-sm space-y-4">
-        <div className="flex items-start justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-base text-foreground">
                 {account?.displayName ?? t('accounts:tierFree')}
               </span>
@@ -125,7 +125,7 @@ export function AccountSyncPanel() {
           </div>
 
           {/* Tier Switcher for development/testing */}
-          <div className="flex items-center gap-1 bg-muted p-1 rounded-md text-xs">
+          <div className="flex flex-wrap items-center gap-1 bg-muted p-1 rounded-md text-xs">
             <button
               type="button"
               onClick={() => handleTierSwitch('free')}
@@ -212,7 +212,7 @@ export function AccountSyncPanel() {
 
       {/* Cloud Mesh Sync Section */}
       <section className="bg-card border border-border rounded-lg p-5 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Cloud className="w-4 h-4 text-purple-400" />
@@ -238,7 +238,7 @@ export function AccountSyncPanel() {
 
         {/* Sync Summary Provenance */}
         <div className="bg-muted/30 border border-border/50 rounded-md p-3 text-xs space-y-2">
-          <div className="flex items-center justify-between text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <Lock className="w-3.5 h-3.5 text-purple-400" />
               <span className="font-medium text-foreground">

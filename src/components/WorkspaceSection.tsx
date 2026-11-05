@@ -85,7 +85,7 @@ export function WorkspaceSection() {
       title={t('title')}
       className="home-workspaces"
       aside={
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button
             type="button"
             className="button button-small"
