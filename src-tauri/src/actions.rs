@@ -1888,6 +1888,108 @@ impl App {
         }
         Ok(op_id)
     }
+
+    /// Opens the active Agent in the user's terminal inside the Workspace project directory.
+    pub fn launch_workspace(&self, workspace_id: &str) -> NexusResult<String> {
+        validate_text(workspace_id, 64)?;
+        let store = self.store()?;
+        let ws = store
+            .get_workspace(workspace_id)?
+            .ok_or_else(|| NexusError::new("workspace.not_found"))?;
+
+        let ws_path = std::path::PathBuf::from(&ws.path);
+        if !ws_path.exists() || !ws_path.is_dir() {
+            return Err(NexusError::new("workspace.directory_not_found"));
+        }
+
+        let primary = AgentId::parse(&ws.primary_agent).unwrap_or(AgentId::Claude);
+        let fallback = ws.fallback_agent.as_deref().and_then(AgentId::parse);
+
+        let snap_primary = self.fresh_snapshot(primary).ok();
+        let primary_inst = snap_primary.as_ref().and_then(|s| s.installations.first());
+
+        let (active_agent, executable_str) = if let Some(p_inst) = primary_inst {
+            (primary, p_inst.executable.clone())
+        } else if let Some(fb) = fallback {
+            let snap_fb = self.fresh_snapshot(fb).ok();
+            let fb_inst = snap_fb.as_ref().and_then(|s| s.installations.first());
+            if let Some(f_inst) = fb_inst {
+                (fb, f_inst.executable.clone())
+            } else {
+                return Err(NexusError::new("workspace.primary_not_installed")
+                    .with("agent", primary.as_str()));
+            }
+        } else {
+            return Err(
+                NexusError::new("workspace.primary_not_installed").with("agent", primary.as_str())
+            );
+        };
+
+        let path = expand(&self.ctx, &executable_str);
+        let resolved = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+        if !path.is_absolute()
+            || !crate::platform::fs::is_executable_file(&path)
+            || !lifecycle::owner_ok(&path)
+            || !lifecycle::owner_ok(&resolved)
+        {
+            return Err(NexusError::new("lifecycle.untrusted_executable"));
+        }
+
+        let spec = if self.ctx.os == crate::platform::Os::Macos {
+            ProcessSpec {
+                program: "/usr/bin/open".into(),
+                args: vec![
+                    "-a".into(),
+                    "Terminal".into(),
+                    ws_path.to_string_lossy().to_string(),
+                ],
+                env: crate::platform::process::base_env(
+                    &self.ctx.home,
+                    &["/usr/bin".into(), "/bin".into()],
+                ),
+                cwd: ws_path.clone(),
+                timeout: std::time::Duration::from_secs(15),
+                max_output: 2048,
+            }
+        } else {
+            ProcessSpec {
+                program: "cmd.exe".into(),
+                args: vec!["/c".into(), "start".into(), "cmd.exe".into()],
+                env: crate::platform::process::base_env(&self.ctx.home, &[]),
+                cwd: ws_path.clone(),
+                timeout: std::time::Duration::from_secs(15),
+                max_output: 2048,
+            }
+        };
+
+        let op_id = new_id("op");
+        store.begin_operation(
+            &op_id,
+            "launch_workspace",
+            Some(active_agent),
+            "launch_workspace",
+            &serde_json::json!({
+                "workspaceId": workspace_id,
+                "workspacePath": ws.path,
+                "activeAgent": active_agent.as_str(),
+            }),
+            Instant::now(),
+        )?;
+        let out = run(&spec)?;
+        let status = if out.success() { "succeeded" } else { "failed" };
+        store.finish_operation(
+            &op_id,
+            status,
+            (!out.success()).then_some("lifecycle.launch_failed"),
+            Instant::now(),
+        )?;
+        if !out.success() {
+            return Err(NexusError::new("lifecycle.launch_failed"));
+        }
+        let now_str = Instant::now().to_rfc3339();
+        let _ = store.update_workspace_opened(workspace_id, &now_str);
+        Ok(op_id)
+    }
 }
 
 fn tail(text: &str) -> String {

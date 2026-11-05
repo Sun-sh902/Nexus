@@ -22,6 +22,10 @@ fn main() {
             "nexus_storage_status",
             "nexus_prune_history",
             "nexus_diagnostic_preview",
+            "nexus_list_workspaces",
+            "nexus_create_workspace",
+            "nexus_delete_workspace",
+            "nexus_launch_workspace",
         ]),
     ))
     .expect("Tauri build configuration must be valid");

@@ -48,6 +48,44 @@ export interface AgentHistory { backups: BackupRecord[]; operations: OperationRe
 export interface StorageStatus { dataDir: string; dbBytes: number; backupCount: number; backupBytes: number; operationCount: number; unresolvedCount: number; healthRowCount: number }
 export interface PruneResult { prunedOperations: number; prunedHealthRows: number; prunedBackups: number }
 export interface DiagnosticPreview { filename: string; json: string }
+
+export type WorkspaceReadiness = 'ready' | 'attention' | 'blocked';
+
+export interface WorkspaceInstruction {
+  fileName: string;
+  relativePath: string;
+  sizeBytes: number;
+  lineCount: number;
+  targetAgent: string;
+  isSupportedByPrimary: boolean;
+}
+
+export interface WorkspaceView {
+  id: string;
+  name: string;
+  path: string;
+  displayPath: string;
+  primaryAgent: AgentId;
+  fallbackAgent?: AgentId;
+  activeAgent: AgentId;
+  readiness: WorkspaceReadiness;
+  readinessReasons: string[];
+  instructions: WorkspaceInstruction[];
+  isGitRepo: boolean;
+  gitBranch?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastOpenedAt?: string;
+}
+
+export interface CreateWorkspaceRequest {
+  name?: string;
+  path: string;
+  primaryAgent: AgentId;
+  fallbackAgent?: AgentId;
+  modelId?: string;
+  profileId?: string;
+}
 export interface ConfigEdit { targetId: string; location: string; format: string; createsFile: boolean; beforeFingerprint: string | null; afterFingerprint: string; changes: { key: string; before: string | null; after: string | null }[]; diff: { kind: '+' | '-'; text: string }[] }
 export interface PlanView {
   id: string; digest: string; kind: string; agentId: AgentId | null; createdAt: string; expiresAt: string; params: Pairs;
@@ -121,4 +159,8 @@ export const backend = {
   storageStatus: () => call<StorageStatus>('nexus_storage_status'),
   pruneHistory: (retainDays: number) => call<PruneResult>('nexus_prune_history', { retainDays }),
   diagnosticPreview: () => call<DiagnosticPreview>('nexus_diagnostic_preview'),
+  listWorkspaces: () => call<WorkspaceView[]>('nexus_list_workspaces'),
+  createWorkspace: (request: CreateWorkspaceRequest) => call<WorkspaceView>('nexus_create_workspace', { request }),
+  deleteWorkspace: (workspaceId: string) => call<void>('nexus_delete_workspace', { workspaceId }),
+  launchWorkspace: (workspaceId: string) => call<string>('nexus_launch_workspace', { workspaceId }),
 };

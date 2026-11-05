@@ -24,7 +24,7 @@ async function startLive(page: Page, locale: 'en-US', route: string, options: { 
       invoke: async (cmd: string, args: Record<string, unknown>) => {
         calls.push({ cmd, args });
         switch (cmd) {
-          case 'app_metadata': return { contractVersion: 1, version: '0.3.0', preferredLocale: locale };
+          case 'app_metadata': return { contractVersion: 1, version: '0.4.0', preferredLocale: locale };
           case 'apply_app_preferences': return { contractVersion: 1, requestId: (args.request as { requestId: string }).requestId, result: 'applied' };
           case 'nexus_set_locale': return null;
           case 'nexus_overview':
@@ -50,7 +50,7 @@ async function startLive(page: Page, locale: 'en-US', route: string, options: { 
             pruned = true;
             return { prunedOperations: 5, prunedHealthRows: 12, prunedBackups: 2 };
           case 'nexus_diagnostic_preview':
-            return { filename: 'nexus-diagnostics.json', json: JSON.stringify({ schemaVersion: 1, appVersion: '0.3.0', system: { dataDir: '~/Library/Application Support/dev.nexus.app' } }, null, 2) };
+            return { filename: 'nexus-diagnostics.json', json: JSON.stringify({ schemaVersion: 1, appVersion: '0.4.0', system: { dataDir: '~/Library/Application Support/dev.nexus.app' } }, null, 2) };
           case 'nexus_check_provider':
             return { providerId: (args as { providerId: string }).providerId, status: 'connected', httpStatus: 200, latencyMs: 35, message: 'Endpoint reachable and verified', modelsDiscovered: ['gpt-4o'] };
           case 'nexus_confirm_plan':

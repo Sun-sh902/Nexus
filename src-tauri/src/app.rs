@@ -947,6 +947,53 @@ impl App {
             json: crate::core::redact(&minimized),
         })
     }
+
+    // ---- Workspaces (Phase 8) ---------------------------------------------------------------
+
+    pub fn list_workspaces(&self) -> NexusResult<Vec<crate::workspaces::WorkspaceView>> {
+        let records = {
+            let store = self.store()?;
+            store.workspaces()?
+        };
+        let overview = self.overview(false)?;
+        let mut installed = HashMap::new();
+        let mut health = HashMap::new();
+        for a in &overview.agents {
+            installed.insert(a.snapshot.agent_id, !a.snapshot.installations.is_empty());
+            health.insert(a.snapshot.agent_id, a.health.readiness);
+        }
+        let views = records
+            .iter()
+            .map(|r| crate::workspaces::inspect_workspace(&self.ctx, r, &installed, &health))
+            .collect();
+        Ok(views)
+    }
+
+    pub fn create_workspace(
+        &self,
+        req: crate::workspaces::CreateWorkspaceRequest,
+    ) -> NexusResult<crate::workspaces::WorkspaceView> {
+        let now = Instant::now();
+        let record = {
+            let store = self.store()?;
+            crate::workspaces::create_workspace(&self.ctx, &store, req, now)?
+        };
+        let overview = self.overview(false)?;
+        let mut installed = HashMap::new();
+        let mut health = HashMap::new();
+        for a in &overview.agents {
+            installed.insert(a.snapshot.agent_id, !a.snapshot.installations.is_empty());
+            health.insert(a.snapshot.agent_id, a.health.readiness);
+        }
+        Ok(crate::workspaces::inspect_workspace(
+            &self.ctx, &record, &installed, &health,
+        ))
+    }
+
+    pub fn delete_workspace(&self, id: &str) -> NexusResult<()> {
+        let store = self.store()?;
+        store.delete_workspace(id)
+    }
 }
 
 #[cfg(all(test, unix))]

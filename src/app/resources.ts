@@ -14,7 +14,8 @@ import findingsEn from '../locales/en-US/findings.json' with { type: 'json' };
 import actionsEn from '../locales/en-US/actions.json' with { type: 'json' };
 import errorsEn from '../locales/en-US/errors.json' with { type: 'json' };
 import capabilityEn from '../locales/en-US/capability.json' with { type: 'json' };
+import workspacesEn from '../locales/en-US/workspaces.json' with { type: 'json' };
 
 export const resources = {
-  'en-US': { common: commonEn, navigation: navigationEn, health: healthEn, home: homeEn, agents: agentsEn, models: modelsEn, providers: providersEn, extensions: extensionsEn, system: systemEn, settings: settingsEn, diagnostics: diagnosticsEn, checks: checksEn, findings: findingsEn, actions: actionsEn, errors: errorsEn, capability: capabilityEn },
+  'en-US': { common: commonEn, navigation: navigationEn, health: healthEn, home: homeEn, agents: agentsEn, models: modelsEn, providers: providersEn, extensions: extensionsEn, system: systemEn, settings: settingsEn, diagnostics: diagnosticsEn, checks: checksEn, findings: findingsEn, actions: actionsEn, errors: errorsEn, capability: capabilityEn, workspaces: workspacesEn },
 };

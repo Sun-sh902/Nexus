@@ -1,5 +1,6 @@
 import { activity, agents, extensions, findModel, findProfile, findProvider, models, profiles, providers, system, type AgentFixture } from './fixtures';
 import type { ActivityView, AgentView, ExtensionView, NodeKey, NodeState, Text, ToolView } from './view';
+import type { WorkspaceView } from '../app/backend';
 
 // Explicit demo mode only (browser preview, UI tests). Reuses the original Phase 1 fixture
 // strings so the approved demo reads exactly as before.
@@ -60,3 +61,39 @@ export const demoTools = (): ToolView[] => system.tools.map(tool => ({ key: tool
 export const demoActivity = (): ActivityView[] => activity.map(item => ({ id: item.id, text: { key: `home:${item.key}` }, time: item.time }));
 export const demoSystem = { os: system.os, arch: system.architecture };
 export const demoCatalog = { models, profiles, providers };
+export const demoWorkspaces = (): WorkspaceView[] => [
+  {
+    id: 'demo_ws_1',
+    name: 'Nexus Core',
+    path: '/Users/developer/Documents/Nexus',
+    displayPath: '~/Documents/Nexus',
+    primaryAgent: 'claude',
+    fallbackAgent: 'codex',
+    activeAgent: 'claude',
+    readiness: 'ready',
+    readinessReasons: ['workspace.agent_ready:claude'],
+    instructions: [
+      {
+        fileName: 'AGENTS.md',
+        relativePath: 'AGENTS.md',
+        sizeBytes: 4200,
+        lineCount: 84,
+        targetAgent: 'universal',
+        isSupportedByPrimary: true,
+      },
+      {
+        fileName: 'CLAUDE.md',
+        relativePath: 'CLAUDE.md',
+        sizeBytes: 1540,
+        lineCount: 32,
+        targetAgent: 'claude',
+        isSupportedByPrimary: true,
+      },
+    ],
+    isGitRepo: true,
+    gitBranch: 'main',
+    createdAt: '2026-10-27T00:00:00Z',
+    updatedAt: '2026-11-05T00:00:00Z',
+    lastOpenedAt: '2026-11-05T06:00:00Z',
+  },
+];

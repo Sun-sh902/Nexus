@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0 — 2026-11-05 (Breakthrough: Phase 8 Project Workspaces)
+
+Major milestone delivering Phase 8 Project Workspaces, bringing context-aware Agent environments, instruction discovery, and safe terminal launch to Project Nexus.
+
+### Added
+- **Project Workspaces (Phase 8)**: register local software repositories and directories as managed Workspaces, binding primary and fallback Agents directly to project paths without mutating global configs.
+- **Deep Project Instruction Discovery**: automatically detects, parses, and line-counts project instruction manifests (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.gemini/rules`, `OPENCODE.md`, `.opencode/rules`, `CODEX.md`) with bounded reads and Agent compatibility verification.
+- **Context-Aware Readiness Evaluation**: computes real-time readiness (`ready`, `attention`, `blocked`) for each workspace based on active Agent installation, agent health, instruction compatibility, directory writability, and automatic fallback resolution.
+- **Safe Terminal Launcher (`nexus_launch_workspace`)**: one-click launch of the active Agent in the user's terminal with working directory strictly pinned to the project path and journaled in the SQLite operations log.
+- **Strict Path Confinement & Traversal Guards**: workspace paths must reside within `$HOME`, strictly rejecting path traversal (`..`), symlinks, and reparse points pointing outside.
+- **Persistent Storage Migration**: added SQLite migration #2 for `workspaces` table with unique path constraints and last-opened timestamps.
+- **Home Integration**: live Project Workspaces section on the Home page with card grid, Git branch indicators, active Agent badges, instruction tags, and inline registration form.
+
 ## 0.3.0-beta.1 — 2026-11-05 (pre-release, Core Backend Beta Candidate / Phase 7 Public Beta Gate)
 
 Iteration 3 release completing local Skill lifecycle management, directory traversal and executable script disclosures, safe managed removal, and Phase 7 public Beta readiness.

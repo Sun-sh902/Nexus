@@ -1435,6 +1435,94 @@ fn real_machine_discovery_smoke() {
     assert!(!json.contains("sk-"), "possible secret in overview");
 }
 
+#[test]
+fn scenario_workspace_lifecycle_and_context_readiness() {
+    let home = Home::new();
+    home.claude("2.1.311");
+    home.write(".claude/settings.json", "{}");
+
+    let project_dir = home.p("projects/nexus-test-repo");
+    fs::create_dir_all(&project_dir).unwrap();
+    fs::write(
+        project_dir.join("AGENTS.md"),
+        "# Universal Agent Guidelines\nLine 2\nLine 3",
+    )
+    .unwrap();
+    fs::write(
+        project_dir.join("CLAUDE.md"),
+        "# Claude Project Memory\nCommands: pnpm test",
+    )
+    .unwrap();
+
+    let git_dir = project_dir.join(".git");
+    fs::create_dir_all(&git_dir).unwrap();
+    fs::write(git_dir.join("HEAD"), "ref: refs/heads/main\n").unwrap();
+
+    let app = home.app(true);
+
+    // 1. Create Workspace
+    let created = app
+        .create_workspace(crate::workspaces::CreateWorkspaceRequest {
+            name: Some("Nexus Test Repo".into()),
+            path: project_dir.to_string_lossy().to_string(),
+            primary_agent: AgentId::Claude,
+            fallback_agent: Some(AgentId::Codex),
+            model_id: None,
+            profile_id: None,
+        })
+        .unwrap();
+
+    assert_eq!(created.name, "Nexus Test Repo");
+    assert!(created.is_git_repo);
+    assert_eq!(created.git_branch.as_deref(), Some("main"));
+    assert_eq!(created.active_agent, AgentId::Claude);
+    assert_eq!(created.instructions.len(), 2);
+    assert!(created
+        .instructions
+        .iter()
+        .all(|i| i.is_supported_by_primary));
+    assert_eq!(
+        created.readiness,
+        crate::workspaces::WorkspaceReadiness::Ready
+    );
+
+    // 2. Duplicate path rejected
+    let dup_err = app
+        .create_workspace(crate::workspaces::CreateWorkspaceRequest {
+            name: None,
+            path: project_dir.to_string_lossy().to_string(),
+            primary_agent: AgentId::Codex,
+            fallback_agent: None,
+            model_id: None,
+            profile_id: None,
+        })
+        .unwrap_err();
+    assert_eq!(dup_err.code, "workspace.already_exists");
+
+    // 3. Traversal path rejected
+    let trav_err = app
+        .create_workspace(crate::workspaces::CreateWorkspaceRequest {
+            name: None,
+            path: format!("{}/../projects", project_dir.to_string_lossy()),
+            primary_agent: AgentId::Claude,
+            fallback_agent: None,
+            model_id: None,
+            profile_id: None,
+        })
+        .unwrap_err();
+    assert_eq!(trav_err.code, "workspace.traversal_refused");
+
+    // 4. List workspaces
+    let list = app.list_workspaces().unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].id, created.id);
+    assert_eq!(list[0].display_path, "~/projects/nexus-test-repo");
+
+    // 5. Delete workspace
+    app.delete_workspace(&created.id).unwrap();
+    assert_eq!(app.list_workspaces().unwrap().len(), 0);
+}
+
 /// Regenerates the live-mode UI fixture from a deterministic fake home:
 /// `cargo test export_live_ui_fixture -- --ignored`. Output: tests/fixtures/live/*.json.
 #[test]

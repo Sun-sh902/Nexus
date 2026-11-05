@@ -1,6 +1,6 @@
 # Backend implementation progress (Phases 2–7 core backend)
 
-Status date: 2026-11-05. Version `0.3.0` (`v0.3.0-beta.1`). This is the resumable record for the
+Status date: 2026-11-05. Version `0.4.0` (`v0.4.0`). This is the resumable record for the
 Core Backend Beta Candidate program. It records what exists and what was verified; it does not
 claim anything that was not executed. Product authority remains [PRD](PRD.md); sequencing remains
 [ROADMAP](ROADMAP.md).
@@ -18,6 +18,7 @@ claim anything that was not executed. Product authority remains [PRD](PRD.md); s
 | G — Diagnostics + Safe Repair | Implemented: findings, restore backup, reapply assignment, recover interrupted install, disable broken MCP |
 | H — Frontend integration | Done: every page reads Rust data in the desktop app; fixtures only in explicit browser demo mode |
 | I — Validation / review | Automated suites green; real desktop app launched with live data; independent review — see §Independent review |
+| J — Phase 8 Workspaces | Implemented: local project path identity, instruction parsing, context-aware readiness, safe terminal launcher, SQLite migration #2 |
 
 ## Repository recovery (Gate A)
 
@@ -226,6 +227,17 @@ Owner decision: the product ships in English only. Removed the zh-CN catalog, th
 - **UI integration**: "Add local Skill" cards and "Remove…" button for managed skills on Extensions and Agent Detail pages.
 - **Verification (2026-11-05, macOS arm64)**: `cargo test --locked` → **142 passed, 0 failed, 3 ignored**; `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint` → 0 errors; `pnpm test` (Vitest) → 15 passed; `pnpm test:ui` (Playwright + `axe`) → 33 passed; `pnpm build` → pass.
 
+## Phase 8 Project Workspaces Delivery (`0.4.0`, 2026-11-05)
+
+Breakthrough release delivering Phase 8 Project Workspaces, elevating Nexus into an active context-aware Agent mission control:
+- **Project path identity**: local repository path registration confined within `$HOME`, rejecting path traversal (`..`), symlinks, and reparse points.
+- **Deep instruction discovery**: automatically identifies, parses, and line-counts project instruction manifests (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.gemini/rules`, `OPENCODE.md`, `.opencode/rules`, `CODEX.md`) with primary Agent compatibility analysis.
+- **Context-aware readiness evaluation**: evaluates real-time readiness (`ready`, `attention`, `blocked`) based on active Agent health, instruction compatibility, directory writability, and fallback Agent resolution.
+- **Safe terminal launcher (`nexus_launch_workspace`)**: constructs verified executable paths, launches user terminal with working directory strictly pinned to the project path, and logs operation in SQLite.
+- **Persistence & migrations**: added SQLite migration #2 creating `workspaces` table with unique path constraint and last-opened timestamp.
+- **Home UI integration**: `WorkspaceSection` card grid on the Home page with branch chips, active agent badges, instruction tags, one-click terminal launcher, and inline registration form.
+- **Verification (2026-11-05, macOS arm64)**: `cargo test --locked` → **147 passed, 0 failed, 3 ignored**; `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint` → 0 errors; `pnpm test` (Vitest) → 15 passed; `pnpm test:ui` (Playwright + `axe`) → 33 passed; `pnpm build` → pass.
+
 ## Continuation point
 
-All Phase 7 functional criteria (Agent Discovery, Health, Lifecycle, Models/Providers, MCP + Skills, Diagnostics + Safe Repair) have been implemented and verified across macOS and Windows. Public Beta release v0.3.0 (`0.3.0-beta.1`) delivered. Future phases (Phase 8 Project Workspaces, Phase 9 AI Doctor) require separate product authorization.
+Phase 8 Project Workspaces delivered in version 0.4.0. Next canonical roadmap phase is Phase 9 AI Doctor (opt-in redacted evidence interpretation, probable-cause ranking, and recommendations for existing registered actions).

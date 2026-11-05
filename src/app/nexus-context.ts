@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ModelsView, NexusError, Overview } from './backend';
+import type { CreateWorkspaceRequest, ModelsView, NexusError, Overview, WorkspaceView } from './backend';
 import type { ActivityView, AgentView, ExtensionView, Text, ToolView } from '../data/view';
 
 export type DataMode = 'live' | 'demo';
@@ -13,12 +13,17 @@ export interface NexusData {
   extensions: ExtensionView[];
   tools: ToolView[];
   activity: ActivityView[];
+  workspaces: WorkspaceView[];
   scannedAt: string | null;
   refreshing: boolean;
   refresh: () => Promise<void>;
   models: ModelsView | null;
   modelsError: NexusError | null;
   reloadModels: () => Promise<void>;
+  reloadWorkspaces: () => Promise<void>;
+  createWorkspace: (req: CreateWorkspaceRequest) => Promise<WorkspaceView>;
+  deleteWorkspace: (id: string) => Promise<void>;
+  launchWorkspace: (id: string) => Promise<string>;
   findAgent: (id: string) => AgentView | undefined;
 }
 

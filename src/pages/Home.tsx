@@ -6,6 +6,7 @@ import { useNexus, useText } from '../app/nexus-context';
 import { usePreferences } from '../app/preference-context';
 import { formatNumber, formatTimestamp } from '../app/format';
 import { AgentRows } from '../components/AgentRows';
+import { WorkspaceSection } from '../components/WorkspaceSection';
 import { DataState, DetailLink, Kicker, Notice, Section, StateGlyph, Status } from '../components/ui';
 
 const registerStates: readonly Readiness[] = ['ready', 'attention', 'blocked', 'unknown'];
@@ -46,6 +47,8 @@ export function Home() {
     <Section title={t('myAgents')} className="home-agents" aside={<a className="text-action" href="#/agents">{t('allAgents')}<ArrowRight size={13} aria-hidden="true" /></a>}>
       <AgentRows agents={agents} />
     </Section>
+
+    <WorkspaceSection />
 
     <Section title={t('attention')} className="home-attention" aside={<span className="kicker">{t('exhibitsNote')}</span>}>
       <div className="attention-grid">

@@ -24,6 +24,7 @@ mod platform;
 mod scenario_tests;
 mod secrets;
 mod store;
+mod workspaces;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -68,7 +69,11 @@ pub fn run() {
             ipc::nexus_launch_agent,
             ipc::nexus_storage_status,
             ipc::nexus_prune_history,
-            ipc::nexus_diagnostic_preview
+            ipc::nexus_diagnostic_preview,
+            ipc::nexus_list_workspaces,
+            ipc::nexus_create_workspace,
+            ipc::nexus_delete_workspace,
+            ipc::nexus_launch_workspace
         ])
         .setup(|app| {
             // Nexus-owned data lives in the per-app data directory, never inside Agent folders.

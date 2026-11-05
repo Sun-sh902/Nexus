@@ -10,11 +10,12 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use std::path::Path;
 
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
-const MIGRATIONS: &[(i64, &str)] = &[(
-    1,
-    r#"
+const MIGRATIONS: &[(i64, &str)] = &[
+    (
+        1,
+        r#"
 CREATE TABLE providers (
   id TEXT PRIMARY KEY, display_name TEXT NOT NULL, kind TEXT NOT NULL, base_url TEXT,
   auth_mode TEXT NOT NULL, secret_ref TEXT, env_var TEXT, revision INTEGER NOT NULL,
@@ -53,7 +54,25 @@ CREATE TABLE nexus_installations (
   operation_id TEXT NOT NULL, status TEXT NOT NULL, at TEXT NOT NULL,
   PRIMARY KEY (agent_id, recipe_id));
 "#,
-)];
+    ),
+    (
+        2,
+        r#"
+CREATE TABLE workspaces (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  path TEXT NOT NULL UNIQUE,
+  primary_agent TEXT NOT NULL,
+  fallback_agent TEXT,
+  model_id TEXT,
+  profile_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_opened_at TEXT
+);
+"#,
+    ),
+];
 
 pub struct Store {
     conn: Connection,
@@ -124,6 +143,22 @@ pub struct StoreCounts {
     pub unresolved_count: i64,
     pub health_row_count: i64,
     pub backup_count: i64,
+    pub workspace_count: i64,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceRecord {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub primary_agent: String,
+    pub fallback_agent: Option<String>,
+    pub model_id: Option<String>,
+    pub profile_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub last_opened_at: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -782,12 +817,129 @@ impl Store {
             .conn
             .query_row("SELECT COUNT(*) FROM backups", [], |r| r.get(0))
             .map_err(db_err)?;
+        let workspace_count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM workspaces", [], |r| r.get(0))
+            .map_err(db_err)?;
         Ok(StoreCounts {
             operation_count,
             unresolved_count,
             health_row_count,
             backup_count,
+            workspace_count,
         })
+    }
+
+    // ---- Workspaces (Phase 8) ---------------------------------------------------------------
+
+    pub fn insert_workspace(&self, w: &WorkspaceRecord) -> NexusResult<()> {
+        self.conn
+            .execute(
+                "INSERT INTO workspaces (id, name, path, primary_agent, fallback_agent, model_id, profile_id, created_at, updated_at, last_opened_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    w.id,
+                    w.name,
+                    w.path,
+                    w.primary_agent,
+                    w.fallback_agent,
+                    w.model_id,
+                    w.profile_id,
+                    w.created_at,
+                    w.updated_at,
+                    w.last_opened_at,
+                ],
+            )
+            .map_err(|e| {
+                if let rusqlite::Error::SqliteFailure(ref f, _) = e {
+                    if f.code == rusqlite::ErrorCode::ConstraintViolation {
+                        return NexusError::new("workspace.already_exists");
+                    }
+                }
+                db_err(e)
+            })?;
+        Ok(())
+    }
+
+    pub fn delete_workspace(&self, id: &str) -> NexusResult<()> {
+        let deleted = self
+            .conn
+            .execute("DELETE FROM workspaces WHERE id = ?1", [id])
+            .map_err(db_err)?;
+        if deleted == 0 {
+            return Err(NexusError::new("workspace.not_found"));
+        }
+        Ok(())
+    }
+
+    pub fn update_workspace_opened(&self, id: &str, opened_at_rfc3339: &str) -> NexusResult<()> {
+        let updated = self
+            .conn
+            .execute(
+                "UPDATE workspaces SET last_opened_at = ?2, updated_at = ?2 WHERE id = ?1",
+                params![id, opened_at_rfc3339],
+            )
+            .map_err(db_err)?;
+        if updated == 0 {
+            return Err(NexusError::new("workspace.not_found"));
+        }
+        Ok(())
+    }
+
+    pub fn workspaces(&self) -> NexusResult<Vec<WorkspaceRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, name, path, primary_agent, fallback_agent, model_id, profile_id, created_at, updated_at, last_opened_at
+                 FROM workspaces ORDER BY updated_at DESC",
+            )
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(WorkspaceRecord {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    path: r.get(2)?,
+                    primary_agent: r.get(3)?,
+                    fallback_agent: r.get(4)?,
+                    model_id: r.get(5)?,
+                    profile_id: r.get(6)?,
+                    created_at: r.get(7)?,
+                    updated_at: r.get(8)?,
+                    last_opened_at: r.get(9)?,
+                })
+            })
+            .map_err(db_err)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(db_err)?);
+        }
+        Ok(out)
+    }
+
+    pub fn get_workspace(&self, id: &str) -> NexusResult<Option<WorkspaceRecord>> {
+        self.conn
+            .query_row(
+                "SELECT id, name, path, primary_agent, fallback_agent, model_id, profile_id, created_at, updated_at, last_opened_at
+                 FROM workspaces WHERE id = ?1",
+                [id],
+                |r| {
+                    Ok(WorkspaceRecord {
+                        id: r.get(0)?,
+                        name: r.get(1)?,
+                        path: r.get(2)?,
+                        primary_agent: r.get(3)?,
+                        fallback_agent: r.get(4)?,
+                        model_id: r.get(5)?,
+                        profile_id: r.get(6)?,
+                        created_at: r.get(7)?,
+                        updated_at: r.get(8)?,
+                        last_opened_at: r.get(9)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(db_err)
     }
 
     /// Prunes resolved history older than `cutoff_rfc3339`. Unresolved (`executing` /
@@ -1082,5 +1234,67 @@ mod tests {
                     && !lower.contains("secret_value")
             );
         }
+    }
+
+    #[test]
+    fn workspace_crud_and_uniqueness() {
+        let s = Store::open_in_memory().unwrap();
+        let ws = WorkspaceRecord {
+            id: "ws_1".into(),
+            name: "Demo Project".into(),
+            path: "/Users/test/demo".into(),
+            primary_agent: "claude".into(),
+            fallback_agent: Some("codex".into()),
+            model_id: None,
+            profile_id: None,
+            created_at: "2026-11-05T00:00:00Z".into(),
+            updated_at: "2026-11-05T00:00:00Z".into(),
+            last_opened_at: None,
+        };
+        s.insert_workspace(&ws).unwrap();
+        assert_eq!(s.workspaces().unwrap().len(), 1);
+        assert_eq!(
+            s.get_workspace("ws_1").unwrap().unwrap().name,
+            "Demo Project"
+        );
+        assert_eq!(s.counts().unwrap().workspace_count, 1);
+
+        // Duplicate path is rejected
+        let dup = WorkspaceRecord {
+            id: "ws_2".into(),
+            name: "Demo Project 2".into(),
+            path: "/Users/test/demo".into(),
+            primary_agent: "codex".into(),
+            fallback_agent: None,
+            model_id: None,
+            profile_id: None,
+            created_at: "2026-11-05T00:00:00Z".into(),
+            updated_at: "2026-11-05T00:00:00Z".into(),
+            last_opened_at: None,
+        };
+        assert_eq!(
+            s.insert_workspace(&dup).unwrap_err().code,
+            "workspace.already_exists"
+        );
+
+        // Update opened
+        s.update_workspace_opened("ws_1", "2026-11-05T01:00:00Z")
+            .unwrap();
+        assert_eq!(
+            s.get_workspace("ws_1")
+                .unwrap()
+                .unwrap()
+                .last_opened_at
+                .as_deref(),
+            Some("2026-11-05T01:00:00Z")
+        );
+
+        // Delete
+        s.delete_workspace("ws_1").unwrap();
+        assert_eq!(s.workspaces().unwrap().len(), 0);
+        assert_eq!(
+            s.delete_workspace("ws_1").unwrap_err().code,
+            "workspace.not_found"
+        );
     }
 }

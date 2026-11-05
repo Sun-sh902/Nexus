@@ -26,6 +26,10 @@
     "allow-nexus-launch-agent",
     "allow-nexus-storage-status",
     "allow-nexus-prune-history",
-    "allow-nexus-diagnostic-preview"
+    "allow-nexus-diagnostic-preview",
+    "allow-nexus-list-workspaces",
+    "allow-nexus-create-workspace",
+    "allow-nexus-delete-workspace",
+    "allow-nexus-launch-workspace"
   ]
 }

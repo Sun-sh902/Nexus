@@ -667,6 +667,22 @@ button, a, select, summary { transition: background-color 110ms ease, border-col
 .extensions-area > .notice:first-child { margin-top: 0; }
 .is-spinning { animation: nexus-spin 900ms linear infinite; }
 @keyframes nexus-spin { to { transform: rotate(360deg); } }
+
+/* Project Workspaces (Phase 8) */
+.workspace-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; margin-top: 12px; }
+.workspace-card { display: flex; flex-direction: column; justify-content: space-between; padding: 16px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); }
+.workspace-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.workspace-title-group { min-width: 0; }
+.workspace-title-group h3 { margin: 0; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.workspace-path { margin-top: 4px; font-size: 12px; color: var(--ink-2); overflow-wrap: anywhere; }
+.workspace-branch { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-2); background: var(--sunken); padding: 2px 6px; border-radius: 3px; }
+.workspace-meta-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; }
+.instruction-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 7px; border-radius: 3px; background: var(--sunken); border: 1px solid var(--border-subtle); color: var(--ink-2); }
+.workspace-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.add-workspace-card { padding: 18px; border: 1px dashed var(--border); border-radius: 4px; background: var(--sunken); margin-top: 14px; }
+.add-workspace-card .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
+.add-workspace-card label { display: grid; gap: 4px; font-size: 12px; font-weight: 500; }
+@media (max-width: 760px) { .workspace-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 760px) { .plan-changes li { grid-template-columns: minmax(0,1fr); } .form-stack .search-field { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
 @media (forced-colors: active) {

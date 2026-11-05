@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { backend, liveBackend, NexusError, type ModelsView, type Overview } from './backend';
+import { backend, liveBackend, NexusError, type CreateWorkspaceRequest, type ModelsView, type Overview, type WorkspaceView } from './backend';
 import { agentView, activityViews, toolViews } from '../data/live';
-import { demoActivity, demoAgents, demoExtensions, demoTools } from '../data/demo';
+import { demoActivity, demoAgents, demoExtensions, demoTools, demoWorkspaces } from '../data/demo';
 import { NexusContext, type DataMode, type NexusData } from './nexus-context';
 
 // Single data boundary for pages. Inside the desktop runtime every value comes from Rust; the
@@ -13,10 +13,20 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [models, setModels] = useState<ModelsView | null>(null);
   const [modelsError, setModelsError] = useState<NexusError | null>(null);
+  const [workspaces, setWorkspaces] = useState<WorkspaceView[]>(mode === 'demo' ? demoWorkspaces() : []);
   const [status, setStatus] = useState<NexusData['status']>(mode === 'live' ? 'loading' : 'ready');
   const [error, setError] = useState<NexusError | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const generation = useRef(0);
+
+  const reloadWorkspaces = useCallback(async () => {
+    if (mode !== 'live') return;
+    try {
+      setWorkspaces(await backend.listWorkspaces());
+    } catch {
+      // non-fatal
+    }
+  }, [mode]);
 
   const load = useCallback(async (refresh: boolean) => {
     if (mode !== 'live') return;
@@ -29,6 +39,7 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       setOverview(next);
       setStatus('ready');
       setError(null);
+      void reloadWorkspaces();
     } catch (caught) {
       if (mine !== generation.current) return;
       setError(caught instanceof NexusError ? caught : new NexusError({ code: 'ipc.unavailable', params: [], retryable: true }));
@@ -36,12 +47,54 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     } finally {
       if (mine === generation.current) setRefreshing(false);
     }
-  }, [mode]);
+  }, [mode, reloadWorkspaces]);
 
   const reloadModels = useCallback(async () => {
     if (mode !== 'live') return;
     try { setModels(await backend.models()); setModelsError(null); }
     catch (caught) { setModelsError(caught instanceof NexusError ? caught : new NexusError({ code: 'ipc.unavailable', params: [], retryable: true })); }
+  }, [mode]);
+
+  const createWorkspace = useCallback(async (req: CreateWorkspaceRequest) => {
+    if (mode === 'live') {
+      const created = await backend.createWorkspace(req);
+      await reloadWorkspaces();
+      return created;
+    }
+    const mock: WorkspaceView = {
+      id: `ws_${Date.now()}`,
+      name: req.name || 'New Workspace',
+      path: req.path,
+      displayPath: req.path.replace(/^\/Users\/[^/]+/, '~'),
+      primaryAgent: req.primaryAgent,
+      fallbackAgent: req.fallbackAgent,
+      activeAgent: req.primaryAgent,
+      readiness: 'ready',
+      readinessReasons: [],
+      instructions: [{ fileName: 'AGENTS.md', relativePath: 'AGENTS.md', sizeBytes: 1024, lineCount: 20, targetAgent: 'universal', isSupportedByPrimary: true }],
+      isGitRepo: true,
+      gitBranch: 'main',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setWorkspaces(prev => [mock, ...prev]);
+    return mock;
+  }, [mode, reloadWorkspaces]);
+
+  const deleteWorkspace = useCallback(async (id: string) => {
+    if (mode === 'live') {
+      await backend.deleteWorkspace(id);
+      await reloadWorkspaces();
+    } else {
+      setWorkspaces(prev => prev.filter(w => w.id !== id));
+    }
+  }, [mode, reloadWorkspaces]);
+
+  const launchWorkspace = useCallback(async (id: string) => {
+    if (mode === 'live') {
+      return await backend.launchWorkspace(id);
+    }
+    return `op_mock_launch_${id}`;
   }, [mode]);
 
   // Deferred so the scan's state updates never run synchronously inside the effect body.
@@ -65,13 +118,18 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       extensions: mode === 'demo' ? demoExtensions() : agents.flatMap(agent => agent.extensions),
       tools: mode === 'demo' ? demoTools() : overview ? toolViews(overview) : [],
       activity: mode === 'demo' ? demoActivity() : overview ? activityViews(overview) : [],
+      workspaces,
       scannedAt: mode === 'demo' ? '2026-10-07T02:30:00Z' : overview?.generatedAt ?? null,
       refreshing,
       refresh: () => load(true),
       models, modelsError, reloadModels,
+      reloadWorkspaces,
+      createWorkspace,
+      deleteWorkspace,
+      launchWorkspace,
       findAgent: (id: string) => agents.find(agent => agent.id === id),
     };
-  }, [mode, status, error, overview, refreshing, load, models, modelsError, reloadModels]);
+  }, [mode, status, error, overview, workspaces, refreshing, load, models, modelsError, reloadModels, reloadWorkspaces, createWorkspace, deleteWorkspace, launchWorkspace]);
   return <NexusContext.Provider value={value}>{children}</NexusContext.Provider>;
 }
 

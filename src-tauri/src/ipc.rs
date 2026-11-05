@@ -329,6 +329,56 @@ pub async fn nexus_diagnostic_preview(
         .map_err(|_| NexusError::new("app.task_failed"))?
 }
 
+#[tauri::command]
+pub async fn nexus_list_workspaces(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> NexusResult<Vec<crate::workspaces::WorkspaceView>> {
+    main_window(&window)?;
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.list_workspaces())
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
+}
+
+#[tauri::command]
+pub async fn nexus_create_workspace(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    request: crate::workspaces::CreateWorkspaceRequest,
+) -> NexusResult<crate::workspaces::WorkspaceView> {
+    main_window(&window)?;
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.create_workspace(request))
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
+}
+
+#[tauri::command]
+pub fn nexus_delete_workspace(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> NexusResult<()> {
+    main_window(&window)?;
+    bounded(&workspace_id, 64)?;
+    state.delete_workspace(&workspace_id)
+}
+
+#[tauri::command]
+pub async fn nexus_launch_workspace(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> NexusResult<String> {
+    main_window(&window)?;
+    bounded(&workspace_id, 64)?;
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.launch_workspace(&workspace_id))
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
+}
+
 #[cfg(test)]
 pub const COMMANDS: &[&str] = &[
     "nexus_overview",
@@ -350,6 +400,10 @@ pub const COMMANDS: &[&str] = &[
     "nexus_storage_status",
     "nexus_prune_history",
     "nexus_diagnostic_preview",
+    "nexus_list_workspaces",
+    "nexus_create_workspace",
+    "nexus_delete_workspace",
+    "nexus_launch_workspace",
 ];
 
 #[cfg(test)]

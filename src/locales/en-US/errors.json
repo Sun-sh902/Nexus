@@ -113,5 +113,13 @@
   "ipc.contract_mismatch": "Frontend and backend versions do not match.",
   "model.routing_mismatch": "This Agent currently routes to {{route}}; Nexus will not write a model for a different Provider.",
   "lifecycle.prefix_unknown": "The npm prefix that owns this installation could not be determined, so Nexus will not change it.",
-  "health.evidence_stale": "The previous scan has expired. Scan again to update readiness."
+  "health.evidence_stale": "The previous scan has expired. Scan again to update readiness.",
+  "workspace.invalid_path": "The provided workspace path is invalid or empty.",
+  "workspace.traversal_refused": "Path traversal ('..') is strictly refused for security.",
+  "workspace.directory_not_found": "The directory does not exist or is not accessible.",
+  "workspace.outside_home": "Workspaces must reside within your user home directory ($HOME).",
+  "workspace.symlink_refused": "The directory is a symlink or reparse point, which is refused for security.",
+  "workspace.already_exists": "A workspace with this exact path is already registered.",
+  "workspace.not_found": "Workspace not found.",
+  "workspace.primary_not_installed": "Primary agent ({{agent}}) is not installed on this system."
 }
