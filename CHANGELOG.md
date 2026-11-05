@@ -11,7 +11,7 @@ Iteration 2 release achieving Windows parity, Gate I review closure, and user-in
 
 ### Fixed & Hardened
 - **Windows process & executable parity**: `is_executable_file` now recognizes `.cmd` and `.bat` shims on Windows, unblocking Windows `npm.cmd` execution.
-- **Windows filesystem safety**: `check_mutable_target` refuses mutation across Windows reparse points (`FileTypeExt::is_reparse_point`) in addition to symlinks; `check_owner` guards against mutating read-only files on Windows.
+- **Windows filesystem safety**: `check_mutable_target` refuses mutation across Windows reparse points (`FILE_ATTRIBUTE_REPARSE_POINT`) in addition to symlinks; `check_owner` guards against mutating read-only files on Windows.
 - **Windows global npm layout**: `npm_prefix_of` supports Windows `%AppData%/npm/node_modules/` layout in addition to Unix `/lib/node_modules/`.
 - **Platform support level updated**: Windows discovery, health, and verified operations are promoted to `Supported` alongside macOS.
 
