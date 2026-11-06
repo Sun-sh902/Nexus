@@ -997,6 +997,22 @@ impl App {
         store.delete_workspace(id)
     }
 
+    pub fn discover_local_workspaces(
+        &self,
+    ) -> NexusResult<Vec<crate::workspaces::DiscoveredWorkspaceCandidate>> {
+        let store = self.store()?;
+        crate::workspaces::discover_local_workspaces(&self.ctx, &store, Instant::now())
+    }
+
+    pub fn live_pulse(&self) -> NexusResult<crate::live_pulse::LivePulseReport> {
+        let overview = self.overview(false)?;
+        Ok(crate::live_pulse::collect_live_pulse(
+            &self.ctx,
+            &overview.agents,
+            Instant::now(),
+        ))
+    }
+
     pub fn consult_ai_doctor(
         &self,
         agent_id: AgentId,

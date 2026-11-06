@@ -1474,6 +1474,47 @@ fn real_machine_discovery_smoke() {
             chk.domain, chk.status, chk.subject, chk.reason
         );
     }
+
+    // Verify Live Pulse (real processes, config SHA-256 ledger, cross-agent skill matrix)
+    let pulse = app.live_pulse().unwrap();
+    println!(
+        "real live pulse: active_processes={} total_mem_mb={:.1} configs={} unique_skills={}",
+        pulse.active_process_count,
+        pulse.total_memory_mb,
+        pulse.config_ledger.len(),
+        pulse.skill_matrix.len()
+    );
+    for p in &pulse.processes {
+        println!(
+            "  proc pid={} agent={:?} cmd={} cpu={:.1}% mem={:.1}MB elapsed={}",
+            p.pid, p.agent_id, p.command, p.cpu_percent, p.memory_mb, p.elapsed
+        );
+    }
+    for c in pulse.config_ledger.iter().filter(|c| c.exists) {
+        println!(
+            "  cfg [{}] {} bytes={} lines={} sha256={:?}",
+            c.agent_id.as_str(),
+            c.location,
+            c.size_bytes,
+            c.line_count,
+            c.sha256.as_deref().map(|s| &s[..12])
+        );
+    }
+
+    // Verify 1-click local project auto-discovery
+    let candidates = app.discover_local_workspaces().unwrap();
+    println!("real discovered local workspaces: {}", candidates.len());
+    for cand in candidates.iter().take(8) {
+        println!(
+            "  workspace candidate {} ({}) agent={} branch={:?} sessions={} instr={:?}",
+            cand.name,
+            cand.display_path,
+            cand.primary_agent.as_str(),
+            cand.git_branch,
+            cand.session_count,
+            cand.instruction_files
+        );
+    }
 }
 
 #[test]

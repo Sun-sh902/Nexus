@@ -65,6 +65,18 @@ pub struct CreateWorkspaceRequest {
     pub profile_id: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveredWorkspaceCandidate {
+    pub name: String,
+    pub path: String,
+    pub display_path: String,
+    pub primary_agent: AgentId,
+    pub git_branch: Option<String>,
+    pub instruction_files: Vec<String>,
+    pub session_count: usize,
+}
+
 /// Validates that a workspace path is safe, absolute, exists as a directory,
 /// is confined strictly within user `$HOME`, and does not traverse or point outside.
 pub fn validate_workspace_path(ctx: &HostContext, raw_path: &str) -> NexusResult<PathBuf> {
@@ -408,7 +420,128 @@ pub fn create_workspace(
     };
 
     store.insert_workspace(&record)?;
+
+    // Automatically link any existing discovered host sessions for this project path to the new workspace.
+    if let Ok(sessions) = store.sessions(None, None, 200) {
+        for mut s in sessions {
+            let s_canon = std::fs::canonicalize(&s.project_path)
+                .unwrap_or_else(|_| PathBuf::from(&s.project_path));
+            if s_canon == valid_path && s.workspace_id.as_deref() != Some(record.id.as_str()) {
+                s.workspace_id = Some(record.id.clone());
+                let _ = store.insert_or_update_session(&s);
+            }
+        }
+    }
+
     Ok(record)
+}
+
+/// Discovers real local project directories on the host from recent Claude/Codex session logs
+/// and common user project roots (`~/Documents`, `~/Projects`, `~/Developer`), strictly confined
+/// to `$HOME` and excluding already-registered workspaces.
+pub fn discover_local_workspaces(
+    ctx: &HostContext,
+    store: &Store,
+    now: Instant,
+) -> NexusResult<Vec<DiscoveredWorkspaceCandidate>> {
+    let existing = store.workspaces().unwrap_or_default();
+    for discovered in crate::sessions::discover_host_agent_sessions(ctx, &existing, now) {
+        let _ = store.insert_or_update_session(&discovered);
+    }
+    let sessions = store.sessions(None, None, 200).unwrap_or_default();
+
+    let home_canon = std::fs::canonicalize(&ctx.home).unwrap_or_else(|_| ctx.home.clone());
+    let existing_paths: std::collections::HashSet<PathBuf> = existing
+        .iter()
+        .map(|w| std::fs::canonicalize(&w.path).unwrap_or_else(|_| PathBuf::from(&w.path)))
+        .collect();
+
+    let mut candidate_paths: std::collections::BTreeSet<PathBuf> =
+        std::collections::BTreeSet::new();
+    let mut session_counts: HashMap<PathBuf, (usize, HashMap<AgentId, usize>)> = HashMap::new();
+
+    for s in &sessions {
+        if let Ok(valid) = validate_workspace_path(ctx, &s.project_path) {
+            if valid != home_canon && !existing_paths.contains(&valid) {
+                candidate_paths.insert(valid.clone());
+                let entry = session_counts
+                    .entry(valid)
+                    .or_insert_with(|| (0, HashMap::new()));
+                entry.0 += 1;
+                if let Some(aid) = AgentId::parse(&s.agent_id) {
+                    *entry.1.entry(aid).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+
+    for folder in ["Documents", "Projects", "Developer"] {
+        let root = ctx.home.join(folder);
+        let Ok(entries) = std::fs::read_dir(&root) else {
+            continue;
+        };
+        for entry in entries.flatten().take(60) {
+            let p = entry.path();
+            if let Ok(valid) = validate_workspace_path(ctx, &p.to_string_lossy()) {
+                if valid != home_canon && !existing_paths.contains(&valid) {
+                    candidate_paths.insert(valid);
+                }
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    for path in candidate_paths {
+        let (session_count, ref agent_tally) =
+            session_counts.get(&path).cloned().unwrap_or_default();
+        let (is_git, git_branch) = detect_git(&path);
+        let instructions = scan_instructions(&path, AgentId::Claude);
+        if session_count == 0 && !is_git && instructions.is_empty() {
+            continue;
+        }
+
+        let primary_agent = agent_tally
+            .iter()
+            .max_by_key(|(_, count)| *count)
+            .map(|(aid, _)| *aid)
+            .unwrap_or_else(|| {
+                if instructions.iter().any(|i| i.target_agent == "codex") {
+                    AgentId::Codex
+                } else if instructions.iter().any(|i| i.target_agent == "gemini") {
+                    AgentId::Gemini
+                } else if instructions.iter().any(|i| i.target_agent == "opencode") {
+                    AgentId::Opencode
+                } else {
+                    AgentId::Claude
+                }
+            });
+
+        let name = path
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_else(|| "Workspace".to_string());
+        let display_path = ctx.display_path(&path);
+        let instruction_files = instructions.into_iter().map(|i| i.relative_path).collect();
+
+        out.push(DiscoveredWorkspaceCandidate {
+            name,
+            path: path.to_string_lossy().to_string(),
+            display_path,
+            primary_agent,
+            git_branch,
+            instruction_files,
+            session_count,
+        });
+    }
+
+    out.sort_by(|a, b| {
+        b.session_count
+            .cmp(&a.session_count)
+            .then_with(|| b.instruction_files.len().cmp(&a.instruction_files.len()))
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    out.truncate(20);
+    Ok(out)
 }
 
 #[cfg(test)]

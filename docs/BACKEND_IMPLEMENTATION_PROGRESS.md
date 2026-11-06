@@ -286,6 +286,19 @@ Major milestone delivering Phase 10 Session Continuity and Contextual Usage & Co
   - Materializes `~/NexusWorkspaces/<slug>` and writes `AGENTS.md` on disk when provisioning from an Organization Workspace Template.
 - **Verification (2026-11-06, macOS arm64)**: `cargo test --locked` → **173 passed, 0 failed, 3 ignored** (`real_machine_discovery_smoke` also executed and verified against live host); `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint` → 0 errors; `pnpm test` (Vitest) → 20 passed; `pnpm test:ui` (Playwright + `axe`) → 33 passed; `pnpm build` → pass.
 
+## Iteration 5 Live Host Pulse, Cross-Agent Skill Teleportation Matrix & 1-Click Local Workspace Auto-Discovery (`1.2.0`, 2026-11-06)
+
+- **Live Host Process, Memory & Config SHA-256 Radar (`live_pulse.rs`, `LivePulsePanel.tsx`)**:
+  - Added typed IPC command `nexus_live_pulse` performing fast, bounded, read-only inspection of running host AI agent and MCP server processes (`/bin/ps -axo pid=,pcpu=,rss=,etime=,comm=` on macOS/Linux), reporting active PID, CPU %, RSS memory footprint (MB), and elapsed uptime while strictly redacting commands to executable basenames only (`claude`, `codex`, `opencode`, `gemini`, `mcp-*`).
+  - Added real Configuration File SHA-256 & Byte Ledger inspecting `~/.codex/config.toml`, `~/.claude/settings.json`, `~/.claude.json`, and `~/.config/opencode/opencode.json` on disk with real-time SHA-256 digests, line counts, and byte sizes.
+- **Cross-Agent Skill Teleportation Matrix (`live_pulse.rs`, `CrossAgentSkillMatrix.tsx`, `Extensions.tsx`, `ExtensionRows.tsx`)**:
+  - Builds a deduplicated cross-agent skill matrix across Claude Code (11 skills), OpenAI Codex (5 skills), Gemini CLI, and OpenCode, surfacing each skill's description, `~/...` location, script presence, `installedOn` agents, and `missingOn` agents.
+  - Provides 1-click `+ Port to <Agent>` buttons wired directly to `ActionRequest::AddSkill` so users can teleport any discovered local skill across agents with preview, native confirmation, atomic folder copy, and `Verify::SkillPresent` postcondition verification.
+- **1-Click Local Project Auto-Discovery & Global Host Sessions Stream (`workspaces.rs`, `WorkspaceSection.tsx`)**:
+  - Added typed IPC command `nexus_discover_local_workspaces` scanning real project paths referenced in `~/.claude/history.jsonl`, `~/.claude/projects/*/*.jsonl`, `~/.codex/sessions/*/*/*/*.jsonl`, and local Git repositories under `~/Documents`, `~/Projects`, and `~/Developer` (strictly confined to `$HOME`).
+  - Auto-links existing discovered host sessions to newly imported workspaces upon creation (`create_workspace`) and exposes a 1-click `Recent Host Sessions` toggle on the Home page alongside `Discover Local Projects`.
+- **Verification (2026-11-06, macOS arm64)**: `cargo test --locked` → **177 passed, 0 failed, 3 ignored** (`real_machine_discovery_smoke` verified 4 active processes / 1016.8 MB RAM, 4 config SHA-256 digests, 15 unique skills, and 8 discovered local workspaces on the live Mac); `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint` → 0 errors; `pnpm test` (Vitest) → 33 passed; `pnpm test:ui` (Playwright + `axe`) → 33 passed; `pnpm build` → pass.
+
 ## Continuation point
 
-Phases 0–13 and the `v1.1.0` Real-Time Host & Fleet Truth Engine are complete and verified.
+Phases 0–13 and the `v1.2.0` Live Host Pulse, Cross-Agent Skill Teleportation Matrix & 1-Click Local Workspace Auto-Discovery are complete and verified.

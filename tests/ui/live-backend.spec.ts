@@ -24,7 +24,7 @@ async function startLive(page: Page, locale: 'en-US', route: string, options: { 
       invoke: async (cmd: string, args: Record<string, unknown>) => {
         calls.push({ cmd, args });
         switch (cmd) {
-          case 'app_metadata': return { contractVersion: 1, version: '1.1.0', preferredLocale: locale };
+          case 'app_metadata': return { contractVersion: 1, version: '1.2.0', preferredLocale: locale };
           case 'apply_app_preferences': return { contractVersion: 1, requestId: (args.request as { requestId: string }).requestId, result: 'applied' };
           case 'nexus_set_locale': return null;
           case 'nexus_overview':
@@ -59,6 +59,17 @@ async function startLive(page: Page, locale: 'en-US', route: string, options: { 
             return { syncedAt: '2026-11-05T00:00:00Z', totalExtensions: 0, revocationCount: 0, offlineCached: true, source: 'cache' };
           case 'nexus_get_governance_state':
             return null;
+          case 'nexus_live_pulse':
+            return {
+              scannedAt: '2026-11-06T07:50:00Z',
+              activeProcessCount: 1,
+              totalMemoryMb: 120.5,
+              processes: [{ pid: 41154, agentId: 'claude', command: 'claude', cpuPercent: 0.4, memoryMb: 120.5, elapsed: '01:12:00' }],
+              configLedger: [{ agentId: 'codex', label: 'config.toml', location: '~/.codex/config.toml', exists: true, sizeBytes: 512, lineCount: 18, sha256: '6acf4ab0458f', status: 'observed' }],
+              skillMatrix: [],
+            };
+          case 'nexus_discover_local_workspaces':
+            return [];
           case 'nexus_confirm_plan':
             if (options.deny) throw { code: 'confirmation.denied', params: [], retryable: false };
             confirmed = true;

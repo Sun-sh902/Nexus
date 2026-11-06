@@ -8,8 +8,10 @@ import {
   type AgentId,
   type ConflictResolutionStrategy,
   type CreateWorkspaceRequest,
+  type DiscoveredWorkspaceCandidate,
   type ExtensionPermissionAnalysis,
   type GovernanceStateView,
+  type LivePulseReport,
   type ModelsView,
   type OrgRole,
   type Overview,
@@ -29,8 +31,10 @@ import {
   demoActivity,
   demoAgents,
   demoAiDoctor,
+  demoDiscoveredWorkspaces,
   demoExtensions,
   demoGovernanceState,
+  demoLivePulse,
   demoRegistryExtensions,
   demoRegistrySyncSummary,
   demoSessions,
@@ -62,6 +66,8 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
   const [registrySyncSummary, setRegistrySyncSummary] = useState<RegistrySyncSummary | null>(mode === 'demo' ? demoRegistrySyncSummary() : null);
   const [registryLoading, setRegistryLoading] = useState(false);
   const [governance, setGovernance] = useState<GovernanceStateView | null>(mode === 'demo' ? demoGovernanceState() : null);
+  const [livePulse, setLivePulse] = useState<LivePulseReport | null>(mode === 'demo' ? demoLivePulse() : null);
+  const [discoveredWorkspaces, setDiscoveredWorkspaces] = useState<DiscoveredWorkspaceCandidate[]>(mode === 'demo' ? demoDiscoveredWorkspaces() : []);
   const [status, setStatus] = useState<NexusData['status']>(mode === 'live' ? 'loading' : 'ready');
   const [error, setError] = useState<NexusError | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -233,6 +239,33 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     }
   }, [mode]);
 
+  const reloadLivePulse = useCallback(async () => {
+    if (mode !== 'live') {
+      setLivePulse(demoLivePulse());
+      return;
+    }
+    try {
+      setLivePulse(await backend.livePulse());
+    } catch {
+      // non-fatal
+    }
+  }, [mode]);
+
+  const discoverLocalWorkspaces = useCallback(async () => {
+    if (mode !== 'live') {
+      const demo = demoDiscoveredWorkspaces();
+      setDiscoveredWorkspaces(demo);
+      return demo;
+    }
+    try {
+      const found = await backend.discoverLocalWorkspaces();
+      setDiscoveredWorkspaces(found);
+      return found;
+    } catch {
+      return [];
+    }
+  }, [mode]);
+
   const switchOrgRole = useCallback(async (role: OrgRole) => {
     if (mode === 'live') {
       const updated = await backend.switchOrgRole(role);
@@ -362,6 +395,8 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       void reloadRegistry();
       void refreshRegistry();
       void reloadGovernance();
+      void reloadLivePulse();
+      void discoverLocalWorkspaces();
     } catch (caught) {
       if (mine !== generation.current) return;
       setError(caught instanceof NexusError ? caught : new NexusError({ code: 'ipc.unavailable', params: [], retryable: true }));
@@ -369,7 +404,7 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     } finally {
       if (mine === generation.current) setRefreshing(false);
     }
-  }, [mode, reloadWorkspaces, reloadSessions, reloadUsageInsights, reloadAccount, reloadRegistry, refreshRegistry, reloadGovernance]);
+  }, [mode, reloadWorkspaces, reloadSessions, reloadUsageInsights, reloadAccount, reloadRegistry, refreshRegistry, reloadGovernance, reloadLivePulse, discoverLocalWorkspaces]);
 
   const reloadModels = useCallback(async () => {
     if (mode !== 'live') return;
@@ -381,6 +416,8 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     if (mode === 'live') {
       const created = await backend.createWorkspace(req);
       await reloadWorkspaces();
+      await reloadSessions();
+      await discoverLocalWorkspaces();
       return created;
     }
     const mock: WorkspaceView = {
@@ -400,8 +437,9 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       updatedAt: new Date().toISOString(),
     };
     setWorkspaces(prev => [mock, ...prev]);
+    setDiscoveredWorkspaces(prev => prev.filter(c => c.path !== req.path));
     return mock;
-  }, [mode, reloadWorkspaces]);
+  }, [mode, reloadWorkspaces, reloadSessions, discoverLocalWorkspaces]);
 
   const deleteWorkspace = useCallback(async (id: string) => {
     if (mode === 'live') {
@@ -504,6 +542,10 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       switchOrgRole,
       updateOrgPolicy,
       triggerEmergencyBreakGlass,
+      livePulse,
+      reloadLivePulse,
+      discoveredWorkspaces,
+      discoverLocalWorkspaces,
       findAgent: (id: string) => agents.find(agent => agent.id === id),
     };
   }, [
@@ -512,7 +554,8 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     launchWorkspace, consultAiDoctor, reloadSessions, resumeSession, deleteSession, reloadUsageInsights,
     reloadAccount, switchAccountTier, triggerSync, resolveSyncConflict, exportAccountBundle, purgeCloudSync,
     registryExtensions, registrySyncSummary, registryLoading, reloadRegistry, analyzePermissions, verifySignature, refreshRegistry,
-    governance, reloadGovernance, switchOrgRole, updateOrgPolicy, triggerEmergencyBreakGlass
+    governance, reloadGovernance, switchOrgRole, updateOrgPolicy, triggerEmergencyBreakGlass,
+    livePulse, reloadLivePulse, discoveredWorkspaces, discoverLocalWorkspaces
   ]);
   return <NexusContext.Provider value={value}>{children}</NexusContext.Provider>;
 }

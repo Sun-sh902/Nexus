@@ -4,7 +4,9 @@ import type {
   AccountProfile,
   AgentId,
   AiDoctorConsultation,
+  DiscoveredWorkspaceCandidate,
   GovernanceStateView,
+  LivePulseReport,
   RegistryExtension,
   RegistrySyncSummary,
   SessionSummary,
@@ -704,3 +706,81 @@ export const demoGovernanceState = (): GovernanceStateView => ({
     cryptoProof: 'Zero-Knowledge Boundary v1 (Ed25519 Signed Policy + Local-Only Secret Vault)',
   },
 });
+
+export const demoLivePulse = (): LivePulseReport => ({
+  scannedAt: '2026-11-06T07:50:00Z',
+  activeProcessCount: 4,
+  totalMemoryMb: 1016.8,
+  processes: [
+    { pid: 41154, agentId: 'claude', command: 'claude', cpuPercent: 0.4, memoryMb: 326.6, elapsed: '02:42:50' },
+    { pid: 51970, agentId: 'claude', command: 'claude', cpuPercent: 2.1, memoryMb: 281.4, elapsed: '06:09' },
+    { pid: 51401, agentId: 'claude', command: 'Claude', cpuPercent: 0.0, memoryMb: 263.9, elapsed: '10:00' },
+    { pid: 5608, agentId: 'opencode', command: 'opencode', cpuPercent: 0.0, memoryMb: 144.9, elapsed: '02-04:50:56' },
+  ],
+  configLedger: [
+    { agentId: 'codex', label: 'config.toml', location: '~/.codex/config.toml', exists: true, sizeBytes: 3795, lineCount: 111, sha256: '6acf4ab0458fe812b90c33a10d4f92e1b0a17c92837465102938475610293847', status: 'observed' },
+    { agentId: 'claude', label: 'settings.json', location: '~/.claude/settings.json', exists: true, sizeBytes: 126, lineCount: 9, sha256: 'e9f217090df9a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef01234', status: 'observed' },
+    { agentId: 'claude', label: '.claude.json', location: '~/.claude.json', exists: true, sizeBytes: 102765, lineCount: 2853, sha256: 'ef12e18e4981b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456', status: 'observed' },
+    { agentId: 'opencode', label: 'opencode.json', location: '~/.config/opencode/opencode.json', exists: true, sizeBytes: 1833, lineCount: 68, sha256: '87d34f069ecda1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef01234', status: 'observed' },
+  ],
+  skillMatrix: [
+    {
+      name: 'artifact-emulator',
+      description: 'Render rich interactive HTML widgets inline or as standalone artifacts.',
+      sourceAgent: 'claude',
+      sourceLocation: '~/.claude/skills/synced/google-skills/artifact-emulator',
+      hasScripts: true,
+      installedOn: ['claude'],
+      missingOn: ['codex', 'gemini', 'opencode'],
+    },
+    {
+      name: 'google-workspace',
+      description: 'Connect to Google Docs, Sheets, Slides, Drive, and Calendar workflows.',
+      sourceAgent: 'claude',
+      sourceLocation: '~/.claude/skills/synced/google-skills/google-workspace',
+      hasScripts: true,
+      installedOn: ['claude'],
+      missingOn: ['codex', 'gemini', 'opencode'],
+    },
+    {
+      name: 'openai-docs',
+      description: 'Official OpenAI API and Responses SDK documentation reference.',
+      sourceAgent: 'codex',
+      sourceLocation: '~/.codex/skills/.system/openai-docs',
+      hasScripts: false,
+      installedOn: ['codex'],
+      missingOn: ['claude', 'gemini', 'opencode'],
+    },
+    {
+      name: 'skill-creator',
+      description: 'Interactive guide and validator for authoring portable Agent skills.',
+      sourceAgent: 'codex',
+      sourceLocation: '~/.codex/skills/.system/skill-creator',
+      hasScripts: true,
+      installedOn: ['codex', 'claude'],
+      missingOn: ['gemini', 'opencode'],
+    },
+  ],
+});
+
+export const demoDiscoveredWorkspaces = (): DiscoveredWorkspaceCandidate[] => [
+  {
+    name: 'Nexus',
+    path: '/Users/example/Documents/Nexus',
+    displayPath: '~/Documents/Nexus',
+    primaryAgent: 'codex',
+    gitBranch: 'main',
+    instructionFiles: ['AGENTS.md'],
+    sessionCount: 4,
+  },
+  {
+    name: 'FlowAssert-Phase3B-Dev',
+    path: '/Users/example/Documents/FlowAssert-Phase3B-Dev',
+    displayPath: '~/Documents/FlowAssert-Phase3B-Dev',
+    primaryAgent: 'claude',
+    gitBranch: 'final-version/public-release',
+    instructionFiles: [],
+    sessionCount: 2,
+  },
+];
+

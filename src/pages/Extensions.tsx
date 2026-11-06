@@ -5,6 +5,7 @@ import { useNexus } from '../app/nexus-context';
 import { usePreferences } from '../app/preference-context';
 import { formatNumber } from '../app/format';
 import { ExtensionRows } from '../components/ExtensionRows';
+import { CrossAgentSkillMatrix } from '../components/CrossAgentSkillMatrix';
 import { MarketplacePanel } from '../components/MarketplacePanel';
 import { ActionPanel } from '../components/ActionFlow';
 import { useActionFlow } from '../app/action-flow';
@@ -54,6 +55,8 @@ export function Extensions() {
             }
             return null;
           } : undefined} />
+
+          {view === 'skills' && <CrossAgentSkillMatrix />}
 
           {live && view === 'skills' && <section className="sheet add-mcp" aria-labelledby="add-skill-title">
             <header className="sheet-head"><h2 id="add-skill-title" className="sheet-title">{t('liveAddSkillTitle')}</h2><span className="kicker">{t('liveAddSkillKicker')}</span></header>

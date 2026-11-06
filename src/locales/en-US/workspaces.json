@@ -32,5 +32,15 @@
   "sessionsToggle": "Sessions ({{count}})",
   "hideSessions": "Hide Sessions",
   "usageToggle": "Usage & Cost Insights",
-  "hideUsage": "Hide Usage"
+  "hideUsage": "Hide Usage",
+  "discoverToggle": "Discover Local Projects ({{count}})",
+  "hideDiscover": "Hide Discovered Projects",
+  "discoverTitle": "Auto-Discovered Local Projects",
+  "discoverSubtitle": "Detected from recent Claude Code & Codex session logs and local Git repositories inside $HOME.",
+  "discoverImport": "+ Import Workspace",
+  "discoverImportAll": "Import All ({{count}})",
+  "discoverSessionsBadge": "{{count}} sessions",
+  "discoverEmpty": "All detected local projects are already registered as workspaces.",
+  "globalSessionsToggle": "Recent Host Sessions ({{count}})",
+  "hideGlobalSessions": "Hide Host Sessions"
 }

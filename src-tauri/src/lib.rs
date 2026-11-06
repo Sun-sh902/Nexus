@@ -19,6 +19,7 @@ mod ipc;
 #[cfg(test)]
 mod keychain_selftest;
 mod lifecycle;
+mod live_pulse;
 mod models;
 mod native_confirm;
 mod network;
@@ -101,7 +102,9 @@ pub fn run() {
             ipc::nexus_get_governance_state,
             ipc::nexus_switch_org_role,
             ipc::nexus_update_org_policy,
-            ipc::nexus_trigger_emergency_break_glass
+            ipc::nexus_trigger_emergency_break_glass,
+            ipc::nexus_live_pulse,
+            ipc::nexus_discover_local_workspaces
         ])
         .setup(|app| {
             // Nexus-owned data lives in the per-app data directory, never inside Agent folders.

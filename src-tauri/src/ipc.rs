@@ -640,6 +640,30 @@ pub async fn nexus_trigger_emergency_break_glass(
         .map_err(|_| NexusError::new("app.task_failed"))?
 }
 
+#[tauri::command]
+pub async fn nexus_live_pulse(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> NexusResult<crate::live_pulse::LivePulseReport> {
+    main_window(&window)?;
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.live_pulse())
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
+}
+
+#[tauri::command]
+pub async fn nexus_discover_local_workspaces(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> NexusResult<Vec<crate::workspaces::DiscoveredWorkspaceCandidate>> {
+    main_window(&window)?;
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.discover_local_workspaces())
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
+}
+
 #[cfg(test)]
 pub const COMMANDS: &[&str] = &[
     "nexus_overview",
@@ -686,6 +710,8 @@ pub const COMMANDS: &[&str] = &[
     "nexus_switch_org_role",
     "nexus_update_org_policy",
     "nexus_trigger_emergency_break_glass",
+    "nexus_live_pulse",
+    "nexus_discover_local_workspaces",
 ];
 
 #[cfg(test)]

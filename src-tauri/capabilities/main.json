@@ -51,6 +51,8 @@
     "allow-nexus-get-governance-state",
     "allow-nexus-switch-org-role",
     "allow-nexus-update-org-policy",
-    "allow-nexus-trigger-emergency-break-glass"
+    "allow-nexus-trigger-emergency-break-glass",
+    "allow-nexus-live-pulse",
+    "allow-nexus-discover-local-workspaces"
   ]
 }

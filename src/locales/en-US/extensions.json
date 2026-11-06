@@ -69,5 +69,14 @@
   "liveAddSkillAgentHelp": "Agent that will receive the skill in its skills folder.",
   "liveAddSkillPreview": "Preview installation",
   "liveAddSkillNotice": "The skill folder is copied into the Agent's skills directory. Any bundled scripts are disclosed and require confirmation before copying.",
-  "liveRemoveSkill": "Remove…"
+  "liveRemoveSkill": "Remove…",
+  "skillMatrixTitle": "Cross-Agent Skill Teleportation Matrix",
+  "skillMatrixKicker": "1-Click Skill Sync Across Agents",
+  "skillMatrixSubtitle": "Every local skill discovered across Claude Code, OpenAI Codex, Gemini CLI, and OpenCode. Teleport any skill to another Agent with a single verified atomic copy.",
+  "skillInstalledOn": "Installed on:",
+  "skillTeleportTo": "Teleport to:",
+  "skillPortButton": "+ Port to {{agent}}",
+  "skillAllInstalled": "Synced across all Agents",
+  "skillScriptsBadge": "Scripts",
+  "skillInstructionsBadge": "Docs"
 }

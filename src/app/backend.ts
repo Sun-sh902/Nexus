@@ -87,6 +87,55 @@ export interface CreateWorkspaceRequest {
   profileId?: string;
 }
 
+export interface DiscoveredWorkspaceCandidate {
+  name: string;
+  path: string;
+  displayPath: string;
+  primaryAgent: AgentId;
+  gitBranch?: string | null;
+  instructionFiles: string[];
+  sessionCount: number;
+}
+
+export interface HostProcessItem {
+  pid: number;
+  agentId: AgentId | null;
+  command: string;
+  cpuPercent: number;
+  memoryMb: number;
+  elapsed: string;
+}
+
+export interface ConfigFilePulse {
+  agentId: AgentId;
+  label: string;
+  location: string;
+  exists: boolean;
+  sizeBytes: number;
+  lineCount: number;
+  sha256: string | null;
+  status: string;
+}
+
+export interface CrossAgentSkillItem {
+  name: string;
+  description: string | null;
+  sourceAgent: AgentId;
+  sourceLocation: string;
+  hasScripts: boolean;
+  installedOn: AgentId[];
+  missingOn: AgentId[];
+}
+
+export interface LivePulseReport {
+  scannedAt: string;
+  activeProcessCount: number;
+  totalMemoryMb: number;
+  processes: HostProcessItem[];
+  configLedger: ConfigFilePulse[];
+  skillMatrix: CrossAgentSkillItem[];
+}
+
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
 export interface ProbableCause {
@@ -526,4 +575,8 @@ export const backend = {
     call<GovernanceStateView>('nexus_update_org_policy', { request }),
   triggerEmergencyBreakGlass: (enabled: boolean, reason?: string) =>
     call<GovernanceStateView>('nexus_trigger_emergency_break_glass', { enabled, reason: reason ?? null }),
+  livePulse: () =>
+    call<LivePulseReport>('nexus_live_pulse'),
+  discoverLocalWorkspaces: () =>
+    call<DiscoveredWorkspaceCandidate[]>('nexus_discover_local_workspaces'),
 };

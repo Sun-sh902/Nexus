@@ -6,6 +6,7 @@ import { useNexus, useText } from '../app/nexus-context';
 import { usePreferences } from '../app/preference-context';
 import { formatNumber, formatTimestamp } from '../app/format';
 import { AgentRows } from '../components/AgentRows';
+import { LivePulsePanel } from '../components/LivePulsePanel';
 import { WorkspaceSection } from '../components/WorkspaceSection';
 import { DataState, DetailLink, Kicker, Notice, Section, StateGlyph, Status } from '../components/ui';
 
@@ -49,6 +50,8 @@ export function Home() {
     </Section>
 
     <WorkspaceSection />
+
+    <LivePulsePanel />
 
     <Section title={t('attention')} className="home-attention" aside={<span className="kicker">{t('exhibitsNote')}</span>}>
       <div className="attention-grid">

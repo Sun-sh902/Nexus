@@ -47,6 +47,8 @@ fn main() {
             "nexus_switch_org_role",
             "nexus_update_org_policy",
             "nexus_trigger_emergency_break_glass",
+            "nexus_live_pulse",
+            "nexus_discover_local_workspaces",
         ]),
     ))
     .expect("Tauri build configuration must be valid");

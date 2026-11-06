@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Folder, GitBranch, Terminal, Trash2, Plus, FileCode2, Clock, BarChart3 } from 'lucide-react';
+import { Folder, GitBranch, Terminal, Trash2, Plus, FileCode2, Clock, BarChart3, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNexus } from '../app/nexus-context';
-import type { AgentId } from '../app/backend';
+import type { AgentId, DiscoveredWorkspaceCandidate } from '../app/backend';
 import { Section, Status, Notice } from './ui';
 import { SessionContinuity } from './SessionContinuity';
 import { UsageInsightsPanel } from './UsageInsightsPanel';
@@ -16,9 +16,12 @@ const AGENTS: { id: AgentId; name: string }[] = [
 
 export function WorkspaceSection() {
   const { t } = useTranslation(['workspaces', 'common', 'errors']);
-  const { workspaces, sessions, createWorkspace, deleteWorkspace, launchWorkspace } = useNexus();
+  const { workspaces, sessions, discoveredWorkspaces, discoverLocalWorkspaces, createWorkspace, deleteWorkspace, launchWorkspace } = useNexus();
   const [adding, setAdding] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
+  const [showGlobalSessions, setShowGlobalSessions] = useState(false);
+  const [showDiscover, setShowDiscover] = useState(false);
+  const [importingPath, setImportingPath] = useState<string | null>(null);
   const [expandedWsId, setExpandedWsId] = useState<string | null>(null);
   const [path, setPath] = useState('');
   const [name, setName] = useState('');
@@ -28,6 +31,40 @@ export function WorkspaceSection() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [launchMsg, setLaunchMsg] = useState<string | null>(null);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
+
+  const handleImportCandidate = async (cand: DiscoveredWorkspaceCandidate) => {
+    setErrorMsg(null);
+    setImportingPath(cand.path);
+    try {
+      await createWorkspace({
+        name: cand.name,
+        path: cand.path,
+        primaryAgent: cand.primaryAgent,
+      });
+    } catch (err: unknown) {
+      const code = err && typeof err === 'object' && 'code' in err ? String((err as { code: string }).code) : 'workspace.invalid_path';
+      setErrorMsg(t(`errors:${code}`, { defaultValue: t('errors:app.task_failed') }));
+    } finally {
+      setImportingPath(null);
+    }
+  };
+
+  const handleImportAllCandidates = async () => {
+    setErrorMsg(null);
+    for (const cand of discoveredWorkspaces) {
+      setImportingPath(cand.path);
+      try {
+        await createWorkspace({
+          name: cand.name,
+          path: cand.path,
+          primaryAgent: cand.primaryAgent,
+        });
+      } catch {
+        // continue importing remaining
+      }
+    }
+    setImportingPath(null);
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,6 +126,28 @@ export function WorkspaceSection() {
           <button
             type="button"
             className="button button-small"
+            onClick={() => {
+              const next = !showDiscover;
+              setShowDiscover(next);
+              if (next) void discoverLocalWorkspaces();
+            }}
+            aria-pressed={showDiscover}
+          >
+            <Sparkles size={13} aria-hidden="true" />
+            <span>{showDiscover ? t('hideDiscover') : t('discoverToggle', { count: discoveredWorkspaces.length })}</span>
+          </button>
+          <button
+            type="button"
+            className="button button-small"
+            onClick={() => setShowGlobalSessions(prev => !prev)}
+            aria-pressed={showGlobalSessions}
+          >
+            <Clock size={13} aria-hidden="true" />
+            <span>{showGlobalSessions ? t('hideGlobalSessions') : t('globalSessionsToggle', { count: sessions.length })}</span>
+          </button>
+          <button
+            type="button"
+            className="button button-small"
             onClick={() => setShowUsage(prev => !prev)}
             aria-pressed={showUsage}
           >
@@ -109,6 +168,86 @@ export function WorkspaceSection() {
       {errorMsg && <Notice tone="attention">{errorMsg}</Notice>}
       {launchMsg && <Notice tone="success">{launchMsg}</Notice>}
       {showUsage && <UsageInsightsPanel />}
+      {showGlobalSessions && (
+        <div className="sheet" style={{ padding: '12px', marginBottom: '12px' }}>
+          <SessionContinuity />
+        </div>
+      )}
+      {showDiscover && (
+        <div className="sheet" style={{ padding: '14px', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+            <div>
+              <h4 style={{ margin: 0 }}>{t('discoverTitle')}</h4>
+              <p className="field-help" style={{ margin: '2px 0 0' }}>{t('discoverSubtitle')}</p>
+            </div>
+            {discoveredWorkspaces.length > 1 && (
+              <button
+                type="button"
+                className="button button-small button-primary"
+                disabled={importingPath !== null}
+                onClick={() => void handleImportAllCandidates()}
+              >
+                <span>{t('discoverImportAll', { count: discoveredWorkspaces.length })}</span>
+              </button>
+            )}
+          </div>
+          {discoveredWorkspaces.length === 0 ? (
+            <p className="field-help" style={{ margin: 0 }}>{t('discoverEmpty')}</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {discoveredWorkspaces.map(cand => {
+                const agentLabel = AGENTS.find(a => a.id === cand.primaryAgent)?.name ?? cand.primaryAgent;
+                return (
+                  <div
+                    key={cand.path}
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '8px',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-subtle, rgba(128,128,128,0.2))',
+                    }}
+                  >
+                    <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <Folder size={14} aria-hidden="true" />
+                        <strong lang="en-US">{cand.name}</strong>
+                        <span className="chip">{agentLabel}</span>
+                        {cand.gitBranch && (
+                          <span className="workspace-branch mono">
+                            <GitBranch size={11} aria-hidden="true" />
+                            <span>{cand.gitBranch}</span>
+                          </span>
+                        )}
+                        {cand.sessionCount > 0 && (
+                          <span className="chip mono">{t('discoverSessionsBadge', { count: cand.sessionCount })}</span>
+                        )}
+                        {cand.instructionFiles.map(f => (
+                          <span key={f} className="instruction-tag mono">{f}</span>
+                        ))}
+                      </div>
+                      <div className="mono" style={{ fontSize: '0.76rem', opacity: 0.75, overflowWrap: 'anywhere', marginTop: '2px' }}>
+                        {cand.displayPath}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="button button-small"
+                      disabled={importingPath !== null}
+                      onClick={() => void handleImportCandidate(cand)}
+                    >
+                      <span>{t('discoverImport')}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {adding && (
         <form onSubmit={handleCreate} className="add-workspace-card">

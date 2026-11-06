@@ -53,5 +53,21 @@
   "systemImpactLive": "Tools are marked against the Agents that require them.",
   "activityKickerLive": "Operation journal",
   "activityEmpty": "No operations yet.",
-  "activityNoteLive": "Only changes made through Nexus are recorded."
+  "activityNoteLive": "Only changes made through Nexus are recorded.",
+  "livePulseTitle": "Live Host Telemetry & Config Ledger",
+  "livePulseKicker": "Real-Time Process & SHA-256 Radar",
+  "livePulseRefresh": "Refresh Pulse",
+  "livePulseActiveProcs": "Active Processes",
+  "livePulseTotalMemory": "Agent Memory Footprint",
+  "livePulseTrackedConfigs": "Observed Config Files",
+  "livePulseUniqueSkills": "Cross-Agent Skills",
+  "livePulseProcHeading": "Running Local Agent & MCP Processes",
+  "livePulseNoProcs": "No active Agent or MCP server processes currently running in memory.",
+  "livePulsePid": "PID {{pid}}",
+  "livePulseCpu": "{{cpu}}% CPU",
+  "livePulseMem": "{{mem}} MB",
+  "livePulseUptime": "Up {{elapsed}}",
+  "livePulseMcpHelper": "MCP Process",
+  "livePulseConfigHeading": "Live Configuration File SHA-256 Ledger",
+  "livePulseLinesBytes": "{{lines}} lines · {{bytes}} B"
 }

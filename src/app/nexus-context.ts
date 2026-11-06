@@ -7,8 +7,10 @@ import type {
   AiDoctorConsultation,
   ConflictResolutionStrategy,
   CreateWorkspaceRequest,
+  DiscoveredWorkspaceCandidate,
   ExtensionPermissionAnalysis,
   GovernanceStateView,
+  LivePulseReport,
   ModelsView,
   NexusError,
   OrgRole,
@@ -75,6 +77,10 @@ export interface NexusData {
   switchOrgRole: (role: OrgRole) => Promise<void>;
   updateOrgPolicy: (req: UpdateOrgPolicyRequest) => Promise<void>;
   triggerEmergencyBreakGlass: (enabled: boolean, reason?: string) => Promise<void>;
+  livePulse: LivePulseReport | null;
+  reloadLivePulse: () => Promise<void>;
+  discoveredWorkspaces: DiscoveredWorkspaceCandidate[];
+  discoverLocalWorkspaces: () => Promise<DiscoveredWorkspaceCandidate[]>;
   findAgent: (id: string) => AgentView | undefined;
 }
 
