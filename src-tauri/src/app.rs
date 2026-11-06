@@ -199,6 +199,7 @@ impl App {
         // Anything still "executing" was interrupted by a crash or kill: mark, never replay.
         store.reconcile_interrupted(Instant::now())?;
         crate::registry::ensure_registry_seeded(&store)?;
+        crate::governance::ensure_governance_seeded(&store)?;
         Ok(App {
             ctx,
             store: Mutex::new(store),
@@ -1253,6 +1254,42 @@ impl App {
     ) -> NexusResult<crate::registry::RegistrySyncSummary> {
         let store = self.store()?;
         crate::registry::refresh_registry_index(&store, force)
+    }
+
+    // ---- Team & Organization Control Plane (Phase 13) --------------------------------------
+
+    pub fn get_governance_state(&self) -> NexusResult<crate::governance::GovernanceStateView> {
+        let store = self.store()?;
+        crate::governance::get_governance_state(&store)
+    }
+
+    pub fn switch_org_role(
+        &self,
+        new_role: &str,
+    ) -> NexusResult<crate::governance::GovernanceStateView> {
+        let store = self.store()?;
+        crate::governance::switch_org_role(&store, new_role)
+    }
+
+    pub fn update_org_policy(
+        &self,
+        request: crate::governance::UpdateOrgPolicyRequest,
+    ) -> NexusResult<crate::governance::GovernanceStateView> {
+        let store = self.store()?;
+        crate::governance::update_org_policy(&store, request)
+    }
+
+    pub fn trigger_emergency_break_glass(
+        &self,
+        enabled: bool,
+        reason: Option<String>,
+    ) -> NexusResult<crate::governance::GovernanceStateView> {
+        let store = self.store()?;
+        crate::governance::trigger_emergency_break_glass(
+            &store,
+            enabled,
+            reason.as_deref().unwrap_or(""),
+        )
     }
 }
 

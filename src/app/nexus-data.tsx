@@ -9,7 +9,9 @@ import {
   type ConflictResolutionStrategy,
   type CreateWorkspaceRequest,
   type ExtensionPermissionAnalysis,
+  type GovernanceStateView,
   type ModelsView,
+  type OrgRole,
   type Overview,
   type RegistryExtension,
   type RegistrySyncSummary,
@@ -17,6 +19,7 @@ import {
   type SignatureVerificationResult,
   type SyncCycleResult,
   type SyncDeviceSummary,
+  type UpdateOrgPolicyRequest,
   type UsageInsights,
   type WorkspaceView,
 } from './backend';
@@ -27,6 +30,7 @@ import {
   demoAgents,
   demoAiDoctor,
   demoExtensions,
+  demoGovernanceState,
   demoRegistryExtensions,
   demoRegistrySyncSummary,
   demoSessions,
@@ -57,6 +61,7 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
   const [registryExtensions, setRegistryExtensions] = useState<RegistryExtension[]>(mode === 'demo' ? demoRegistryExtensions() : []);
   const [registrySyncSummary, setRegistrySyncSummary] = useState<RegistrySyncSummary | null>(mode === 'demo' ? demoRegistrySyncSummary() : null);
   const [registryLoading, setRegistryLoading] = useState(false);
+  const [governance, setGovernance] = useState<GovernanceStateView | null>(mode === 'demo' ? demoGovernanceState() : null);
   const [status, setStatus] = useState<NexusData['status']>(mode === 'live' ? 'loading' : 'ready');
   const [error, setError] = useState<NexusError | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -219,6 +224,126 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     }
   }, [mode, reloadRegistry]);
 
+  const reloadGovernance = useCallback(async () => {
+    if (mode !== 'live') return;
+    try {
+      setGovernance(await backend.getGovernanceState());
+    } catch {
+      // non-fatal
+    }
+  }, [mode]);
+
+  const switchOrgRole = useCallback(async (role: OrgRole) => {
+    if (mode === 'live') {
+      const updated = await backend.switchOrgRole(role);
+      setGovernance(updated);
+      return;
+    }
+    setGovernance(prev => {
+      if (!prev) return prev;
+      const canMutatePolicy = role === 'owner' || role === 'admin';
+      return {
+        ...prev,
+        policy: {
+          ...prev.policy,
+          userRole: role,
+          canMutatePolicy,
+        },
+        auditLog: [
+          {
+            id: `aud_role_${Date.now()}`,
+            orgId: prev.policy.orgId,
+            actorRole: role,
+            action: 'role.switched',
+            subject: prev.policy.orgId,
+            outcome: 'succeeded',
+            details: `Switched active governance role to ${role}`,
+            createdAt: new Date().toISOString(),
+          },
+          ...prev.auditLog,
+        ],
+      };
+    });
+  }, [mode]);
+
+  const updateOrgPolicy = useCallback(async (req: UpdateOrgPolicyRequest) => {
+    if (mode === 'live') {
+      const updated = await backend.updateOrgPolicy(req);
+      setGovernance(updated);
+      return;
+    }
+    setGovernance(prev => {
+      if (!prev) return prev;
+      if (!prev.policy.canMutatePolicy) {
+        throw new NexusError({ code: 'governance.insufficient_role', params: [], retryable: false });
+      }
+      const modeVal = (req.enforcementMode === 'advisory' || req.enforcementMode === 'strict_lockdown')
+        ? req.enforcementMode
+        : 'enforced';
+      return {
+        ...prev,
+        policy: {
+          ...prev.policy,
+          enforcementMode: modeVal,
+          approvedAgents: req.approvedAgents,
+          approvedProviders: req.approvedProviders,
+          approvedModels: req.approvedModels,
+          approvedExtensions: req.approvedExtensions,
+          requireSignedExtensions: req.requireSignedExtensions,
+          allowLocalBreakGlass: req.allowLocalBreakGlass,
+          updatedAt: new Date().toISOString(),
+        },
+        auditLog: [
+          {
+            id: `aud_pol_${Date.now()}`,
+            orgId: prev.policy.orgId,
+            actorRole: prev.policy.userRole,
+            action: 'policy.updated',
+            subject: prev.policy.orgId,
+            outcome: 'succeeded',
+            details: `Updated policy allowlists (mode=${modeVal}, agents=${req.approvedAgents.length})`,
+            createdAt: new Date().toISOString(),
+          },
+          ...prev.auditLog,
+        ],
+      };
+    });
+  }, [mode]);
+
+  const triggerEmergencyBreakGlass = useCallback(async (enabled: boolean, reason?: string) => {
+    if (mode === 'live') {
+      const updated = await backend.triggerEmergencyBreakGlass(enabled, reason);
+      setGovernance(updated);
+      return;
+    }
+    setGovernance(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        policy: {
+          ...prev.policy,
+          breakGlassActive: enabled,
+          updatedAt: new Date().toISOString(),
+        },
+        auditLog: [
+          {
+            id: `aud_bg_${Date.now()}`,
+            orgId: prev.policy.orgId,
+            actorRole: prev.policy.userRole,
+            action: enabled ? 'break_glass.activated' : 'break_glass.deactivated',
+            subject: prev.policy.orgId,
+            outcome: 'succeeded',
+            details: enabled
+              ? `Emergency break-glass activated: ${reason || 'Local recovery override'}`
+              : 'Emergency break-glass deactivated; standard policy enforcement restored.',
+            createdAt: new Date().toISOString(),
+          },
+          ...prev.auditLog,
+        ],
+      };
+    });
+  }, [mode]);
+
   const load = useCallback(async (refresh: boolean) => {
     if (mode !== 'live') return;
     const mine = ++generation.current;
@@ -236,6 +361,7 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       void reloadAccount();
       void reloadRegistry();
       void refreshRegistry();
+      void reloadGovernance();
     } catch (caught) {
       if (mine !== generation.current) return;
       setError(caught instanceof NexusError ? caught : new NexusError({ code: 'ipc.unavailable', params: [], retryable: true }));
@@ -243,7 +369,7 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     } finally {
       if (mine === generation.current) setRefreshing(false);
     }
-  }, [mode, reloadWorkspaces, reloadSessions, reloadUsageInsights, reloadAccount, reloadRegistry, refreshRegistry]);
+  }, [mode, reloadWorkspaces, reloadSessions, reloadUsageInsights, reloadAccount, reloadRegistry, refreshRegistry, reloadGovernance]);
 
   const reloadModels = useCallback(async () => {
     if (mode !== 'live') return;
@@ -373,6 +499,11 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
       analyzePermissions,
       verifySignature,
       refreshRegistry,
+      governance,
+      reloadGovernance,
+      switchOrgRole,
+      updateOrgPolicy,
+      triggerEmergencyBreakGlass,
       findAgent: (id: string) => agents.find(agent => agent.id === id),
     };
   }, [
@@ -380,7 +511,8 @@ export function NexusDataProvider({ children }: { children: ReactNode }) {
     refreshing, load, models, modelsError, reloadModels, reloadWorkspaces, createWorkspace, deleteWorkspace,
     launchWorkspace, consultAiDoctor, reloadSessions, resumeSession, deleteSession, reloadUsageInsights,
     reloadAccount, switchAccountTier, triggerSync, resolveSyncConflict, exportAccountBundle, purgeCloudSync,
-    registryExtensions, registrySyncSummary, registryLoading, reloadRegistry, analyzePermissions, verifySignature, refreshRegistry
+    registryExtensions, registrySyncSummary, registryLoading, reloadRegistry, analyzePermissions, verifySignature, refreshRegistry,
+    governance, reloadGovernance, switchOrgRole, updateOrgPolicy, triggerEmergencyBreakGlass
   ]);
   return <NexusContext.Provider value={value}>{children}</NexusContext.Provider>;
 }

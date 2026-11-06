@@ -13,6 +13,7 @@ mod core;
 mod diagnostics;
 mod discovery;
 mod domain;
+mod governance;
 mod health;
 mod ipc;
 #[cfg(test)]
@@ -96,7 +97,11 @@ pub fn run() {
             ipc::nexus_get_registry_extension,
             ipc::nexus_analyze_extension_permissions,
             ipc::nexus_verify_extension_signature,
-            ipc::nexus_refresh_registry_index
+            ipc::nexus_refresh_registry_index,
+            ipc::nexus_get_governance_state,
+            ipc::nexus_switch_org_role,
+            ipc::nexus_update_org_policy,
+            ipc::nexus_trigger_emergency_break_glass
         ])
         .setup(|app| {
             // Nexus-owned data lives in the per-app data directory, never inside Agent folders.

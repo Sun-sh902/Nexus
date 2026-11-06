@@ -10,7 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use std::path::Path;
 
-pub const SCHEMA_VERSION: i64 = 5;
+pub const SCHEMA_VERSION: i64 = 6;
 
 const MIGRATIONS: &[(i64, &str)] = &[
     (
@@ -171,6 +171,51 @@ CREATE INDEX idx_registry_extensions_review ON registry_extensions(review_level)
 CREATE INDEX idx_registry_extensions_publisher ON registry_extensions(publisher_id);
 "#,
     ),
+    (
+        6,
+        r#"
+CREATE TABLE org_policies (
+  policy_id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  org_name TEXT NOT NULL,
+  active_role TEXT NOT NULL DEFAULT 'owner',
+  policy_version INTEGER NOT NULL DEFAULT 1,
+  enforcement_mode TEXT NOT NULL DEFAULT 'enforced',
+  allowed_agents_json TEXT NOT NULL DEFAULT '[]',
+  allowed_providers_json TEXT NOT NULL DEFAULT '[]',
+  allowed_extension_tiers_json TEXT NOT NULL DEFAULT '[]',
+  require_signed_extensions INTEGER NOT NULL DEFAULT 1,
+  min_agent_versions_json TEXT NOT NULL DEFAULT '{}',
+  emergency_break_glass INTEGER NOT NULL DEFAULT 0,
+  signature_ed25519 TEXT NOT NULL,
+  signed_by_key TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE workspace_templates (
+  template_id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  primary_agent TEXT NOT NULL,
+  fallback_agent TEXT,
+  recommended_model TEXT,
+  required_extensions_json TEXT NOT NULL DEFAULT '[]',
+  instructions_scaffold TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE governance_audit_log (
+  audit_id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  actor_role TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  target_entity TEXT NOT NULL,
+  compliance_outcome TEXT NOT NULL,
+  redacted_summary TEXT NOT NULL,
+  recorded_at TEXT NOT NULL
+);
+CREATE INDEX idx_governance_audit_org ON governance_audit_log(org_id, recorded_at DESC);
+"#,
+    ),
 ];
 
 pub struct Store {
@@ -247,6 +292,56 @@ pub struct StoreCounts {
     pub device_count: i64,
     pub envelope_count: i64,
     pub registry_extension_count: i64,
+    pub org_policy_count: i64,
+    pub audit_event_count: i64,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct OrgPolicyRecord {
+    pub policy_id: String,
+    pub org_id: String,
+    pub org_name: String,
+    pub active_role: String,
+    pub policy_version: i64,
+    pub enforcement_mode: String,
+    pub allowed_agents_json: String,
+    pub allowed_providers_json: String,
+    pub allowed_extension_tiers_json: String,
+    pub require_signed_extensions: bool,
+    pub min_agent_versions_json: String,
+    pub emergency_break_glass: bool,
+    pub signature_ed25519: String,
+    pub signed_by_key: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceTemplateRecord {
+    pub template_id: String,
+    pub org_id: String,
+    pub name: String,
+    pub description: String,
+    pub primary_agent: String,
+    pub fallback_agent: Option<String>,
+    pub recommended_model: Option<String>,
+    pub required_extensions_json: String,
+    pub instructions_scaffold: String,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GovernanceAuditRecord {
+    pub audit_id: String,
+    pub org_id: String,
+    pub actor_role: String,
+    pub event_type: String,
+    pub target_entity: String,
+    pub compliance_outcome: String,
+    pub redacted_summary: String,
+    pub recorded_at: String,
 }
 
 #[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -1032,6 +1127,16 @@ impl Store {
             .conn
             .query_row("SELECT COUNT(*) FROM registry_extensions", [], |r| r.get(0))
             .unwrap_or(0);
+        let org_policy_count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM org_policies", [], |r| r.get(0))
+            .unwrap_or(0);
+        let audit_event_count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM governance_audit_log", [], |r| {
+                r.get(0)
+            })
+            .unwrap_or(0);
         Ok(StoreCounts {
             operation_count,
             unresolved_count,
@@ -1042,6 +1147,8 @@ impl Store {
             device_count,
             envelope_count,
             registry_extension_count,
+            org_policy_count,
+            audit_event_count,
         })
     }
 
@@ -1706,6 +1813,188 @@ impl Store {
         Ok(())
     }
 
+    // ---- Team & Organization Control Plane (Phase 13) -------------------------------------
+
+    pub fn upsert_org_policy(&self, p: &OrgPolicyRecord) -> NexusResult<()> {
+        self.conn
+            .execute(
+                "INSERT INTO org_policies (policy_id, org_id, org_name, active_role, policy_version, enforcement_mode, allowed_agents_json, allowed_providers_json, allowed_extension_tiers_json, require_signed_extensions, min_agent_versions_json, emergency_break_glass, signature_ed25519, signed_by_key, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+                 ON CONFLICT(policy_id) DO UPDATE SET
+                    org_id = excluded.org_id,
+                    org_name = excluded.org_name,
+                    active_role = excluded.active_role,
+                    policy_version = excluded.policy_version,
+                    enforcement_mode = excluded.enforcement_mode,
+                    allowed_agents_json = excluded.allowed_agents_json,
+                    allowed_providers_json = excluded.allowed_providers_json,
+                    allowed_extension_tiers_json = excluded.allowed_extension_tiers_json,
+                    require_signed_extensions = excluded.require_signed_extensions,
+                    min_agent_versions_json = excluded.min_agent_versions_json,
+                    emergency_break_glass = excluded.emergency_break_glass,
+                    signature_ed25519 = excluded.signature_ed25519,
+                    signed_by_key = excluded.signed_by_key,
+                    updated_at = excluded.updated_at",
+                params![
+                    p.policy_id,
+                    p.org_id,
+                    p.org_name,
+                    p.active_role,
+                    p.policy_version,
+                    p.enforcement_mode,
+                    p.allowed_agents_json,
+                    p.allowed_providers_json,
+                    p.allowed_extension_tiers_json,
+                    if p.require_signed_extensions { 1 } else { 0 },
+                    p.min_agent_versions_json,
+                    if p.emergency_break_glass { 1 } else { 0 },
+                    p.signature_ed25519,
+                    p.signed_by_key,
+                    p.updated_at,
+                ],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn active_org_policy(&self) -> NexusResult<Option<OrgPolicyRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT policy_id, org_id, org_name, active_role, policy_version, enforcement_mode, allowed_agents_json, allowed_providers_json, allowed_extension_tiers_json, require_signed_extensions, min_agent_versions_json, emergency_break_glass, signature_ed25519, signed_by_key, updated_at FROM org_policies ORDER BY updated_at DESC LIMIT 1")
+            .map_err(db_err)?;
+        let mut rows = stmt
+            .query_map([], |r| {
+                let req_sig: i64 = r.get(9)?;
+                let break_glass: i64 = r.get(11)?;
+                Ok(OrgPolicyRecord {
+                    policy_id: r.get(0)?,
+                    org_id: r.get(1)?,
+                    org_name: r.get(2)?,
+                    active_role: r.get(3)?,
+                    policy_version: r.get(4)?,
+                    enforcement_mode: r.get(5)?,
+                    allowed_agents_json: r.get(6)?,
+                    allowed_providers_json: r.get(7)?,
+                    allowed_extension_tiers_json: r.get(8)?,
+                    require_signed_extensions: req_sig != 0,
+                    min_agent_versions_json: r.get(10)?,
+                    emergency_break_glass: break_glass != 0,
+                    signature_ed25519: r.get(12)?,
+                    signed_by_key: r.get(13)?,
+                    updated_at: r.get(14)?,
+                })
+            })
+            .map_err(db_err)?;
+        match rows.next() {
+            Some(res) => Ok(Some(res.map_err(db_err)?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn upsert_workspace_template(&self, t: &WorkspaceTemplateRecord) -> NexusResult<()> {
+        self.conn
+            .execute(
+                "INSERT INTO workspace_templates (template_id, org_id, name, description, primary_agent, fallback_agent, recommended_model, required_extensions_json, instructions_scaffold, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                 ON CONFLICT(template_id) DO UPDATE SET
+                    name = excluded.name,
+                    description = excluded.description,
+                    primary_agent = excluded.primary_agent,
+                    fallback_agent = excluded.fallback_agent,
+                    recommended_model = excluded.recommended_model,
+                    required_extensions_json = excluded.required_extensions_json,
+                    instructions_scaffold = excluded.instructions_scaffold",
+                params![
+                    t.template_id,
+                    t.org_id,
+                    t.name,
+                    t.description,
+                    t.primary_agent,
+                    t.fallback_agent,
+                    t.recommended_model,
+                    t.required_extensions_json,
+                    t.instructions_scaffold,
+                    t.created_at,
+                ],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn list_workspace_templates(&self) -> NexusResult<Vec<WorkspaceTemplateRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT template_id, org_id, name, description, primary_agent, fallback_agent, recommended_model, required_extensions_json, instructions_scaffold, created_at FROM workspace_templates ORDER BY name")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(WorkspaceTemplateRecord {
+                    template_id: r.get(0)?,
+                    org_id: r.get(1)?,
+                    name: r.get(2)?,
+                    description: r.get(3)?,
+                    primary_agent: r.get(4)?,
+                    fallback_agent: r.get(5)?,
+                    recommended_model: r.get(6)?,
+                    required_extensions_json: r.get(7)?,
+                    instructions_scaffold: r.get(8)?,
+                    created_at: r.get(9)?,
+                })
+            })
+            .map_err(db_err)?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(db_err)?);
+        }
+        Ok(out)
+    }
+
+    pub fn insert_governance_audit(&self, a: &GovernanceAuditRecord) -> NexusResult<()> {
+        self.conn
+            .execute(
+                "INSERT INTO governance_audit_log (audit_id, org_id, actor_role, event_type, target_entity, compliance_outcome, redacted_summary, recorded_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    a.audit_id,
+                    a.org_id,
+                    a.actor_role,
+                    a.event_type,
+                    a.target_entity,
+                    a.compliance_outcome,
+                    a.redacted_summary,
+                    a.recorded_at,
+                ],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn list_governance_audits(&self, limit: usize) -> NexusResult<Vec<GovernanceAuditRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT audit_id, org_id, actor_role, event_type, target_entity, compliance_outcome, redacted_summary, recorded_at FROM governance_audit_log ORDER BY recorded_at DESC, rowid DESC LIMIT ?1")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map(params![limit as i64], |r| {
+                Ok(GovernanceAuditRecord {
+                    audit_id: r.get(0)?,
+                    org_id: r.get(1)?,
+                    actor_role: r.get(2)?,
+                    event_type: r.get(3)?,
+                    target_entity: r.get(4)?,
+                    compliance_outcome: r.get(5)?,
+                    redacted_summary: r.get(6)?,
+                    recorded_at: r.get(7)?,
+                })
+            })
+            .map_err(db_err)?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(db_err)?);
+        }
+        Ok(out)
+    }
+
     /// Prunes resolved history older than `cutoff_rfc3339`. Unresolved (`executing` /
     /// `interrupted`) operations, their backups, the newest backup per target, and the newest
     /// health row per Agent are always preserved.
@@ -2254,5 +2543,65 @@ mod tests {
             ext_revoked.revocation_reason.as_deref(),
             Some("Security flaw identified in CVE-2026-9999")
         );
+    }
+
+    #[test]
+    fn org_policy_templates_and_audit_roundtrip() {
+        let s = Store::open_in_memory().unwrap();
+        assert_eq!(s.counts().unwrap().org_policy_count, 0);
+
+        let policy = OrgPolicyRecord {
+            policy_id: "pol_enterprise_1".into(),
+            org_id: "org_nexus_fleet".into(),
+            org_name: "Nexus Enterprise Fleet".into(),
+            active_role: "owner".into(),
+            policy_version: 3,
+            enforcement_mode: "enforced".into(),
+            allowed_agents_json: "[\"codex\",\"claude\",\"gemini\",\"opencode\"]".into(),
+            allowed_providers_json: "[\"anthropic\",\"openai\",\"google\"]".into(),
+            allowed_extension_tiers_json: "[\"official\",\"verified_partner\"]".into(),
+            require_signed_extensions: true,
+            min_agent_versions_json: "{\"codex\":\"0.1.0\",\"claude\":\"1.0.0\"}".into(),
+            emergency_break_glass: false,
+            signature_ed25519: "ed25519_sig_org_policy_v3".into(),
+            signed_by_key: "ed25519:org_root_ca_998877".into(),
+            updated_at: "2026-11-06T00:00:00Z".into(),
+        };
+        s.upsert_org_policy(&policy).unwrap();
+        assert_eq!(s.counts().unwrap().org_policy_count, 1);
+
+        let fetched = s.active_org_policy().unwrap().expect("policy present");
+        assert_eq!(fetched.org_name, "Nexus Enterprise Fleet");
+        assert_eq!(fetched.policy_version, 3);
+        assert!(fetched.require_signed_extensions);
+
+        let tpl = WorkspaceTemplateRecord {
+            template_id: "tpl_rust_sec".into(),
+            org_id: "org_nexus_fleet".into(),
+            name: "Enterprise Rust Security Standard".into(),
+            description: "Zero-trust desktop & systems engineering template".into(),
+            primary_agent: "claude".into(),
+            fallback_agent: Some("codex".into()),
+            recommended_model: Some("claude-sonnet-4-20250514".into()),
+            required_extensions_json: "[\"mcp-memory\",\"mcp-filesystem\"]".into(),
+            instructions_scaffold: "# Enterprise AGENTS.md\nEnforce least privilege.".into(),
+            created_at: "2026-11-06T00:00:00Z".into(),
+        };
+        s.upsert_workspace_template(&tpl).unwrap();
+        assert_eq!(s.list_workspace_templates().unwrap().len(), 1);
+
+        let audit = GovernanceAuditRecord {
+            audit_id: "aud_1".into(),
+            org_id: "org_nexus_fleet".into(),
+            actor_role: "owner".into(),
+            event_type: "policy.updated".into(),
+            target_entity: "pol_enterprise_1".into(),
+            compliance_outcome: "compliant".into(),
+            redacted_summary: "Updated enforcement mode to enforced (v3)".into(),
+            recorded_at: "2026-11-06T00:01:00Z".into(),
+        };
+        s.insert_governance_audit(&audit).unwrap();
+        assert_eq!(s.counts().unwrap().audit_event_count, 1);
+        assert_eq!(s.list_governance_audits(10).unwrap().len(), 1);
     }
 }

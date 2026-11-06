@@ -21,7 +21,8 @@ import usageEn from '../locales/en-US/usage.json' with { type: 'json' };
 import accountsEn from '../locales/en-US/accounts.json' with { type: 'json' };
 import syncEn from '../locales/en-US/sync.json' with { type: 'json' };
 import registryEn from '../locales/en-US/registry.json' with { type: 'json' };
+import governanceEn from '../locales/en-US/governance.json' with { type: 'json' };
 
 export const resources = {
-  'en-US': { common: commonEn, navigation: navigationEn, health: healthEn, home: homeEn, agents: agentsEn, models: modelsEn, providers: providersEn, extensions: extensionsEn, system: systemEn, settings: settingsEn, diagnostics: diagnosticsEn, checks: checksEn, findings: findingsEn, actions: actionsEn, errors: errorsEn, capability: capabilityEn, workspaces: workspacesEn, aiDoctor: aiDoctorEn, sessions: sessionsEn, usage: usageEn, accounts: accountsEn, sync: syncEn, registry: registryEn },
+  'en-US': { common: commonEn, navigation: navigationEn, health: healthEn, home: homeEn, agents: agentsEn, models: modelsEn, providers: providersEn, extensions: extensionsEn, system: systemEn, settings: settingsEn, diagnostics: diagnosticsEn, checks: checksEn, findings: findingsEn, actions: actionsEn, errors: errorsEn, capability: capabilityEn, workspaces: workspacesEn, aiDoctor: aiDoctorEn, sessions: sessionsEn, usage: usageEn, accounts: accountsEn, sync: syncEn, registry: registryEn, governance: governanceEn },
 };

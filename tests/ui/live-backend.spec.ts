@@ -24,7 +24,7 @@ async function startLive(page: Page, locale: 'en-US', route: string, options: { 
       invoke: async (cmd: string, args: Record<string, unknown>) => {
         calls.push({ cmd, args });
         switch (cmd) {
-          case 'app_metadata': return { contractVersion: 1, version: '0.8.0', preferredLocale: locale };
+          case 'app_metadata': return { contractVersion: 1, version: '1.0.0', preferredLocale: locale };
           case 'apply_app_preferences': return { contractVersion: 1, requestId: (args.request as { requestId: string }).requestId, result: 'applied' };
           case 'nexus_set_locale': return null;
           case 'nexus_overview':
@@ -50,13 +50,15 @@ async function startLive(page: Page, locale: 'en-US', route: string, options: { 
             pruned = true;
             return { prunedOperations: 5, prunedHealthRows: 12, prunedBackups: 2 };
           case 'nexus_diagnostic_preview':
-            return { filename: 'nexus-diagnostics.json', json: JSON.stringify({ schemaVersion: 1, appVersion: '0.8.0', system: { dataDir: '~/Library/Application Support/dev.nexus.app' } }, null, 2) };
+            return { filename: 'nexus-diagnostics.json', json: JSON.stringify({ schemaVersion: 1, appVersion: '1.0.0', system: { dataDir: '~/Library/Application Support/dev.nexus.app' } }, null, 2) };
           case 'nexus_check_provider':
             return { providerId: (args as { providerId: string }).providerId, status: 'connected', httpStatus: 200, latencyMs: 35, message: 'Endpoint reachable and verified', modelsDiscovered: ['gpt-4o'] };
           case 'nexus_list_registry_extensions':
             return [];
           case 'nexus_refresh_registry_index':
             return { syncedAt: '2026-11-05T00:00:00Z', totalExtensions: 0, revocationCount: 0, offlineCached: true, source: 'cache' };
+          case 'nexus_get_governance_state':
+            return null;
           case 'nexus_confirm_plan':
             if (options.deny) throw { code: 'confirmation.denied', params: [], retryable: false };
             confirmed = true;

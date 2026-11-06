@@ -47,6 +47,10 @@
     "allow-nexus-get-registry-extension",
     "allow-nexus-analyze-extension-permissions",
     "allow-nexus-verify-extension-signature",
-    "allow-nexus-refresh-registry-index"
+    "allow-nexus-refresh-registry-index",
+    "allow-nexus-get-governance-state",
+    "allow-nexus-switch-org-role",
+    "allow-nexus-update-org-policy",
+    "allow-nexus-trigger-emergency-break-glass"
   ]
 }

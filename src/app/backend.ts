@@ -327,6 +327,97 @@ export interface RegistrySyncSummary {
   offlineCached: boolean;
   source: string;
 }
+
+export type OrgRole = 'owner' | 'admin' | 'member' | 'auditor';
+export type EnforcementMode = 'advisory' | 'enforced' | 'strict_lockdown';
+export type ComplianceStatus = 'compliant' | 'advisory_drift' | 'violation';
+
+export interface OrgPolicyView {
+  orgId: string;
+  orgName: string;
+  userRole: OrgRole;
+  canMutatePolicy: boolean;
+  enforcementMode: EnforcementMode;
+  approvedAgents: string[];
+  approvedProviders: string[];
+  approvedModels: string[];
+  approvedExtensions: string[];
+  requireSignedExtensions: boolean;
+  allowLocalBreakGlass: boolean;
+  breakGlassActive: boolean;
+  policySignatureEd25519: string;
+  policyDigestSha256: string;
+  signatureVerified: boolean;
+  precedenceChain: string[];
+  updatedAt: string;
+}
+
+export interface ComplianceCheckItem {
+  domain: string;
+  subject: string;
+  status: ComplianceStatus;
+  reason: string;
+  remediation: string;
+}
+
+export interface ComplianceReport {
+  overallStatus: ComplianceStatus;
+  complianceScore: number;
+  totalChecks: number;
+  compliantCount: number;
+  driftCount: number;
+  violationCount: number;
+  checks: ComplianceCheckItem[];
+  evaluatedAt: string;
+}
+
+export interface WorkspaceTemplateView {
+  id: string;
+  orgId: string;
+  name: string;
+  description: string;
+  primaryAgent: string;
+  fallbackAgent?: string | null;
+  recommendedModel: string;
+  requiredExtensions: string[];
+  instructionTemplate: string;
+  createdAt: string;
+}
+
+export interface ScopedVisibilityBoundary {
+  sharedFields: string[];
+  neverSharedFields: string[];
+  cryptoProof: string;
+}
+
+export interface GovernanceAuditRecord {
+  id: string;
+  orgId: string;
+  actorRole: string;
+  action: string;
+  subject: string;
+  outcome: string;
+  details: string;
+  createdAt: string;
+}
+
+export interface GovernanceStateView {
+  policy: OrgPolicyView;
+  compliance: ComplianceReport;
+  templates: WorkspaceTemplateView[];
+  auditLog: GovernanceAuditRecord[];
+  visibilityBoundary: ScopedVisibilityBoundary;
+}
+
+export interface UpdateOrgPolicyRequest {
+  enforcementMode: string;
+  approvedAgents: string[];
+  approvedProviders: string[];
+  approvedModels: string[];
+  approvedExtensions: string[];
+  requireSignedExtensions: boolean;
+  allowLocalBreakGlass: boolean;
+}
 export interface ConfigEdit { targetId: string; location: string; format: string; createsFile: boolean; beforeFingerprint: string | null; afterFingerprint: string; changes: { key: string; before: string | null; after: string | null }[]; diff: { kind: '+' | '-'; text: string }[] }
 export interface PlanView {
   id: string; digest: string; kind: string; agentId: AgentId | null; createdAt: string; expiresAt: string; params: Pairs;
@@ -427,4 +518,12 @@ export const backend = {
     call<SignatureVerificationResult>('nexus_verify_extension_signature', { extensionId }),
   refreshRegistryIndex: (force?: boolean) =>
     call<RegistrySyncSummary>('nexus_refresh_registry_index', { force: force ?? false }),
+  getGovernanceState: () =>
+    call<GovernanceStateView>('nexus_get_governance_state'),
+  switchOrgRole: (newRole: OrgRole) =>
+    call<GovernanceStateView>('nexus_switch_org_role', { newRole }),
+  updateOrgPolicy: (request: UpdateOrgPolicyRequest) =>
+    call<GovernanceStateView>('nexus_update_org_policy', { request }),
+  triggerEmergencyBreakGlass: (enabled: boolean, reason?: string) =>
+    call<GovernanceStateView>('nexus_trigger_emergency_break_glass', { enabled, reason: reason ?? null }),
 };

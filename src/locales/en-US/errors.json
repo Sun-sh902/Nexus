@@ -124,5 +124,10 @@
   "workspace.primary_not_installed": "Primary agent ({{agent}}) is not installed on this system.",
   "session.not_found": "Agent session record not found.",
   "session.already_exists": "An agent session with this ID already exists.",
-  "session.invalid_id": "Invalid session identifier."
+  "session.invalid_id": "Invalid session identifier.",
+  "governance.policy_not_found": "Organization policy record was not found.",
+  "governance.cross_tenant_denied": "Cross-tenant access is strictly forbidden.",
+  "governance.insufficient_role": "Your current organization role does not have permission to mutate policy.",
+  "governance.break_glass_disabled": "Emergency break-glass recovery is disabled by organization policy.",
+  "governance.reason_required": "A mandatory incident reason is required to activate emergency break-glass recovery."
 }

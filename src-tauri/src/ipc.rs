@@ -583,6 +583,51 @@ pub fn nexus_refresh_registry_index(
     state.refresh_registry_index(force)
 }
 
+#[tauri::command]
+pub fn nexus_get_governance_state(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> NexusResult<crate::governance::GovernanceStateView> {
+    main_window(&window)?;
+    state.get_governance_state()
+}
+
+#[tauri::command]
+pub fn nexus_switch_org_role(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    new_role: String,
+) -> NexusResult<crate::governance::GovernanceStateView> {
+    main_window(&window)?;
+    bounded(&new_role, 32)?;
+    state.switch_org_role(&new_role)
+}
+
+#[tauri::command]
+pub fn nexus_update_org_policy(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    request: crate::governance::UpdateOrgPolicyRequest,
+) -> NexusResult<crate::governance::GovernanceStateView> {
+    main_window(&window)?;
+    bounded(&request.enforcement_mode, 32)?;
+    state.update_org_policy(request)
+}
+
+#[tauri::command]
+pub fn nexus_trigger_emergency_break_glass(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    enabled: bool,
+    reason: Option<String>,
+) -> NexusResult<crate::governance::GovernanceStateView> {
+    main_window(&window)?;
+    if let Some(ref r) = reason {
+        bounded(r, 256)?;
+    }
+    state.trigger_emergency_break_glass(enabled, reason)
+}
+
 #[cfg(test)]
 pub const COMMANDS: &[&str] = &[
     "nexus_overview",
@@ -625,6 +670,10 @@ pub const COMMANDS: &[&str] = &[
     "nexus_analyze_extension_permissions",
     "nexus_verify_extension_signature",
     "nexus_refresh_registry_index",
+    "nexus_get_governance_state",
+    "nexus_switch_org_role",
+    "nexus_update_org_policy",
+    "nexus_trigger_emergency_break_glass",
 ];
 
 #[cfg(test)]

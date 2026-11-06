@@ -8,8 +8,10 @@ import type {
   ConflictResolutionStrategy,
   CreateWorkspaceRequest,
   ExtensionPermissionAnalysis,
+  GovernanceStateView,
   ModelsView,
   NexusError,
+  OrgRole,
   Overview,
   RegistryExtension,
   RegistrySyncSummary,
@@ -17,6 +19,7 @@ import type {
   SignatureVerificationResult,
   SyncCycleResult,
   SyncDeviceSummary,
+  UpdateOrgPolicyRequest,
   UsageInsights,
   WorkspaceView,
 } from './backend';
@@ -67,6 +70,11 @@ export interface NexusData {
   analyzePermissions: (extensionId: string, agentId: AgentId) => Promise<ExtensionPermissionAnalysis>;
   verifySignature: (extensionId: string) => Promise<SignatureVerificationResult>;
   refreshRegistry: (force?: boolean) => Promise<void>;
+  governance: GovernanceStateView | null;
+  reloadGovernance: () => Promise<void>;
+  switchOrgRole: (role: OrgRole) => Promise<void>;
+  updateOrgPolicy: (req: UpdateOrgPolicyRequest) => Promise<void>;
+  triggerEmergencyBreakGlass: (enabled: boolean, reason?: string) => Promise<void>;
   findAgent: (id: string) => AgentView | undefined;
 }
 

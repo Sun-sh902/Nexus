@@ -1,6 +1,6 @@
 [package]
 name = "project-nexus"
-version = "0.8.0"
+version = "1.0.0"
 description = "Project Nexus — AI Agent Lifecycle Manager"
 license = "Apache-2.0"
 repository = "https://github.com/Sun-sh902/Nexus"

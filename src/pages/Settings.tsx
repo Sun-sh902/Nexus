@@ -7,9 +7,10 @@ import { usePreferences } from '../app/preference-context';
 import { useNexus } from '../app/nexus-context';
 import { InfoList, Notice, PageHeading, StateGlyph } from '../components/ui';
 import { AccountSyncPanel } from '../components/AccountSyncPanel';
+import { GovernanceControlPanel } from '../components/GovernanceControlPanel';
 
 const themes = ['light', 'dark', 'system'] as const;
-const groups = ['appearance', 'account', 'privacy', 'diagnostics', 'about'] as const;
+const groups = ['appearance', 'account', 'governance', 'privacy', 'diagnostics', 'about'] as const;
 
 // A specimen is real Nexus UI scoped to one palette with data-theme, not a picture of one.
 function Plate({ theme }: { theme: 'light' | 'dark' }) {
@@ -116,8 +117,13 @@ export function Settings() {
           <p className="field-help">{t('accounts:subtitle')}</p>
           <AccountSyncPanel />
         </section>
+        <section className="settings-group" id={`${id}-governance`} aria-labelledby={`${id}-governance-title`}>
+          <div className="group-head"><h2 id={`${id}-governance-title`}><span className="section-index" aria-hidden="true">{t('common:sectionMark', { n: 3 })}</span>{t('governanceTitle')}</h2><span className="kicker">{t('governanceKicker')}</span></div>
+          <p className="field-help">{t('governance:subtitle')}</p>
+          <GovernanceControlPanel />
+        </section>
         <section className="settings-group" id={`${id}-privacy`} aria-labelledby={`${id}-privacy-title`}>
-          <div className="group-head"><h2 id={`${id}-privacy-title`}><span className="section-index" aria-hidden="true">{t('common:sectionMark', { n: 3 })}</span>{t('privacy')}</h2><span className="kicker">{t('privacyKicker')}</span></div>
+          <div className="group-head"><h2 id={`${id}-privacy-title`}><span className="section-index" aria-hidden="true">{t('common:sectionMark', { n: 4 })}</span>{t('privacy')}</h2><span className="kicker">{t('privacyKicker')}</span></div>
           <p className="field-help">{t('privacyHelp')}</p>
           {!live ? <Notice>{t('privacyDemoHelp')}</Notice> : storageUnavailable ? <Notice>{t('privacyUnavailable')}</Notice> : storage && <>
             <InfoList items={[
@@ -136,7 +142,7 @@ export function Settings() {
           </>}
         </section>
         <section className="settings-group" id={`${id}-diagnostics`} aria-labelledby={`${id}-diagnostics-title`}>
-          <div className="group-head"><h2 id={`${id}-diagnostics-title`}><span className="section-index" aria-hidden="true">{t('common:sectionMark', { n: 4 })}</span>{t('diagnostics')}</h2><span className="kicker">{t('diagnosticsKicker')}</span></div>
+          <div className="group-head"><h2 id={`${id}-diagnostics-title`}><span className="section-index" aria-hidden="true">{t('common:sectionMark', { n: 5 })}</span>{t('diagnostics')}</h2><span className="kicker">{t('diagnosticsKicker')}</span></div>
           <p className="field-help">{t('diagnosticsHelp')}</p>
           {!live ? <Notice>{t('diagnosticsDemoHelp')}</Notice> : <>
             <div className="plan-actions">
@@ -148,7 +154,7 @@ export function Settings() {
           </>}
         </section>
         <section className="settings-group" id={`${id}-about`} aria-labelledby={`${id}-about-title`}>
-          <div className="group-head"><h2 id={`${id}-about-title`}><span className="section-index" aria-hidden="true">{t('common:sectionMark', { n: 5 })}</span>{t(live ? 'aboutLive' : 'about')}</h2><span className="kicker">{t(live ? 'common:phaseLive' : 'common:phase')}</span></div>
+          <div className="group-head"><h2 id={`${id}-about-title`}><span className="section-index" aria-hidden="true">{t('common:sectionMark', { n: 6 })}</span>{t(live ? 'aboutLive' : 'about')}</h2><span className="kicker">{t(live ? 'common:phaseLive' : 'common:phase')}</span></div>
           <p className="field-help">{t(live ? 'aboutHelpLive' : 'aboutHelp')}</p>
           <InfoList items={[{ label: t('version'), value: <span className="mono">{version}</span> }, { label: t('build'), value: t(live ? 'common:phaseLive' : 'common:phase') }, ...(live ? [{ label: t('dataMode'), value: t('dataModeLive') }] : [])]} />
         </section>

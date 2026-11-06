@@ -43,6 +43,10 @@ fn main() {
             "nexus_analyze_extension_permissions",
             "nexus_verify_extension_signature",
             "nexus_refresh_registry_index",
+            "nexus_get_governance_state",
+            "nexus_switch_org_role",
+            "nexus_update_org_policy",
+            "nexus_trigger_emergency_break_glass",
         ]),
     ))
     .expect("Tauri build configuration must be valid");
