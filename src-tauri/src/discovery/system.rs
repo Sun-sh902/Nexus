@@ -113,6 +113,7 @@ fn tool(
     };
     let version = match key {
         "npm" => npm_package_version(ctx, &first.resolved, "npm", now),
+        "homebrew" => homebrew_git_tag_version(ctx, &first.resolved, now),
         _ => homebrew_path_version(ctx, &first.resolved, now).filter(|_| key == "node"),
     }
     .unwrap_or_else(|| {
@@ -135,6 +136,38 @@ fn tool(
         version,
         candidates: candidates.len(),
     }
+}
+
+/// Reads Homebrew's version from `<prefix>/.git/refs/tags` without executing the `brew` bash script.
+fn homebrew_git_tag_version(
+    ctx: &HostContext,
+    resolved: &Path,
+    now: Instant,
+) -> Option<Observed<String>> {
+    let prefix = resolved.parent()?.parent()?;
+    let tags_dir = prefix.join(".git/refs/tags");
+    let entries = std::fs::read_dir(&tags_dir).ok()?;
+    let mut best: Option<String> = None;
+    for entry in entries.flatten().take(200) {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if let Some(ver) = extract_version(&name) {
+            let replace = match &best {
+                None => true,
+                Some(cur) => version_at_least(&ver, cur) == Some(true),
+            };
+            if replace {
+                best = Some(ver);
+            }
+        }
+    }
+    best.map(|v| {
+        Observed::ok(
+            v,
+            EvidenceSource::InstallLayout,
+            Some(ctx.display_path(&tags_dir)),
+            now,
+        )
+    })
 }
 
 /// On macOS `/usr/bin/git` and `/usr/bin/python3` are stubs that open an install dialog when the

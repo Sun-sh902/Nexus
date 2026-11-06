@@ -80,7 +80,11 @@ pub fn classify_source(ctx: &HostContext, resolved: &Path) -> InstallSource {
         InstallSource::Npm
     } else if s.contains("/Microsoft/WinGet/") {
         InstallSource::WinGet
-    } else if under(ctx, resolved, ".local/share/claude/versions") {
+    } else if under(ctx, resolved, ".local/share/claude/versions")
+        || under(ctx, resolved, ".codex/plugins")
+        || s.contains("/ChatGPT.app/Contents/Resources/codex-cli/")
+        || s.contains("/CodexCLI.app/Contents/MacOS/")
+    {
         InstallSource::NativeInstaller
     } else if under(ctx, resolved, ".opencode") {
         InstallSource::ScriptInstaller
@@ -121,7 +125,9 @@ pub fn probe_policy(ctx: &HostContext, resolved: &Path) -> Result<(), &'static s
         if meta.uid() != uid && meta.uid() != 0 {
             return Err("probe.unexpected_owner");
         }
-        if meta.mode() & 0o022 != 0 {
+        // Reject world-writable binaries always; allow root:admin (gid 80 on macOS) 0775 framework binaries.
+        let root_admin_framework = meta.uid() == 0 && meta.gid() == 80;
+        if (meta.mode() & 0o002 != 0) || ((meta.mode() & 0o020 != 0) && !root_admin_framework) {
             return Err("probe.writable_by_others");
         }
     }
@@ -457,17 +463,63 @@ pub fn skills_in(ctx: &HostContext, dir: &Path) -> (Vec<Skill>, ObsStatus) {
         }
         Err(_) => return (Vec::new(), ObsStatus::AccessDenied),
     };
-    let mut skills = Vec::new();
+    let mut candidate_dirs: Vec<PathBuf> = Vec::new();
     for entry in entries.flatten().take(500) {
         let path = entry.path();
         let Ok(meta) = std::fs::metadata(&path) else {
             continue;
         };
-        // A skill is a directory with a SKILL.md. Hidden folders and containers (e.g. synced
-        // collections) are not skills and are not reported as invalid ones.
-        if !meta.is_dir() || entry.file_name().to_string_lossy().starts_with('.') {
+        if !meta.is_dir() {
             continue;
         }
+        let fname = entry.file_name().to_string_lossy().to_string();
+        if fname == ".system" {
+            // OpenAI Codex stores built-in skills under ~/.codex/skills/.system/<skill>/SKILL.md
+            if let Ok(sub_entries) = std::fs::read_dir(&path) {
+                for sub in sub_entries.flatten().take(200) {
+                    let sp = sub.path();
+                    if sp.is_dir()
+                        && !sub.file_name().to_string_lossy().starts_with('.')
+                        && sp.join("SKILL.md").is_file()
+                    {
+                        candidate_dirs.push(sp);
+                    }
+                }
+            }
+            continue;
+        }
+        if fname == "synced" && !path.join("SKILL.md").is_file() {
+            // Claude Code stores synced skills under ~/.claude/skills/synced/<bucket>/<skill>/SKILL.md
+            if let Ok(buckets) = std::fs::read_dir(&path) {
+                for bucket in buckets.flatten().take(50) {
+                    let bp = bucket.path();
+                    if bp.is_dir() && !bucket.file_name().to_string_lossy().starts_with('.') {
+                        if bp.join("SKILL.md").is_file() {
+                            candidate_dirs.push(bp);
+                        } else if let Ok(skill_entries) = std::fs::read_dir(&bp) {
+                            for se in skill_entries.flatten().take(200) {
+                                let sep = se.path();
+                                if sep.is_dir()
+                                    && !se.file_name().to_string_lossy().starts_with('.')
+                                    && sep.join("SKILL.md").is_file()
+                                {
+                                    candidate_dirs.push(sep);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        if fname.starts_with('.') {
+            continue;
+        }
+        candidate_dirs.push(path);
+    }
+
+    let mut skills = Vec::new();
+    for path in candidate_dirs {
         let manifest = path.join("SKILL.md");
         let (name, description, valid) = match read_bounded(&manifest, 256 * 1024) {
             Ok(read) => parse_skill_frontmatter(&String::from_utf8_lossy(&read.bytes)),
@@ -488,12 +540,19 @@ pub fn skills_in(ctx: &HostContext, dir: &Path) -> (Vec<Skill>, ObsStatus) {
                 })
             })
             .unwrap_or(false);
-        let dir_name = entry.file_name().to_string_lossy().to_string();
+        let dir_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "skill".to_string());
+        let resolved_name: String = crate::core::redact(&name.unwrap_or(dir_name))
+            .chars()
+            .take(80)
+            .collect();
+        if skills.iter().any(|s: &Skill| s.name == resolved_name) {
+            continue;
+        }
         skills.push(Skill {
-            name: crate::core::redact(&name.unwrap_or(dir_name))
-                .chars()
-                .take(80)
-                .collect(),
+            name: resolved_name,
             description: description.map(|d| crate::core::redact(&d).chars().take(240).collect()),
             location: ctx.display_path(&path),
             has_scripts,

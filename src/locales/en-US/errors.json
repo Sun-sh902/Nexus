@@ -126,8 +126,14 @@
   "session.already_exists": "An agent session with this ID already exists.",
   "session.invalid_id": "Invalid session identifier.",
   "governance.policy_not_found": "Organization policy record was not found.",
+  "governance.policy_missing": "Organization policy record was not found.",
   "governance.cross_tenant_denied": "Cross-tenant access is strictly forbidden.",
   "governance.insufficient_role": "Your current organization role does not have permission to mutate policy.",
+  "governance.invalid_role": "The selected organization role is invalid.",
+  "governance.invalid_enforcement_mode": "The selected policy enforcement mode is invalid.",
+  "governance.empty_allowed_agents": "At least one approved AI agent must remain enabled in organization policy.",
+  "governance.agent_not_approved": "This action is blocked because the target agent is not approved by your organization policy.",
+  "governance.strict_lockdown_blocked": "This action is blocked under Strict Lockdown policy enforcement mode.",
   "governance.break_glass_disabled": "Emergency break-glass recovery is disabled by organization policy.",
   "governance.reason_required": "A mandatory incident reason is required to activate emergency break-glass recovery."
 }

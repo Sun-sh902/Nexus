@@ -225,6 +225,16 @@ fn default_bin_dirs(os: Os, home: &Path, env: &BTreeMap<String, EnvValue>) -> Ve
             dirs.push(home.join(".npm-global/bin"));
             dirs.push(home.join(".opencode/bin"));
             dirs.push(home.join(".bun/bin"));
+            let chatgpt_codex = PathBuf::from(
+                "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS",
+            );
+            let plugin_codex =
+                home.join(".codex/plugins/.plugin-appserver/codex-cli/CodexCLI.app/Contents/MacOS");
+            if chatgpt_codex.join("codex").is_file() {
+                dirs.push(chatgpt_codex);
+            } else if plugin_codex.join("codex").is_file() {
+                dirs.push(plugin_codex);
+            }
             dirs.push(PathBuf::from("/opt/homebrew/bin"));
             dirs.push(PathBuf::from("/usr/local/bin"));
             dirs.push(PathBuf::from("/usr/bin"));

@@ -265,6 +265,27 @@ Major milestone delivering Phase 10 Session Continuity and Contextual Usage & Co
 - **Interactive Contextual Usage Panel (`UsageInsightsPanel.tsx`)**: Statistical summary cards, Agent token distribution bars, Model breakdown tables, and privacy guarantee disclosures.
 - **Verification (2026-11-05, macOS arm64)**: `cargo test --locked` → **154 passed, 0 failed, 3 ignored**; `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint` → 0 errors; `pnpm test` (Vitest) → 20 passed; `pnpm build` → pass.
 
+## Phase 11–13 Enterprise & Ecosystem Delivery (`0.7.0` – `1.0.0`, 2026-11-06)
+
+- **Phase 11 (`0.7.0`) Accounts, End-to-End Encrypted Cloud Sync & Pro Tier**: `accounts.rs` + `sync.rs`, AES-256-GCM envelope encryption, device pairing, deterministic conflict resolution, and zero-credential sync boundary.
+- **Phase 12 (`0.8.0`) Extension Registry & Marketplace**: `registry.rs`, Ed25519 signature verification, publisher trust tiers (`official`, `verified_partner`, `community`, `revoked`), permission analysis, and emergency killswitch revocation.
+- **Phase 13 (`1.0.0`) Team & Organization Control Plane**: `governance.rs`, RBAC (`owner`, `admin`, `member`, `auditor`), tenant isolation, Ed25519-signed organization policies, workspace templates, scoped health visibility boundary, and emergency break-glass local recovery override.
+
+## Iteration 4 Real-Time Host & Fleet Truth Engine (`1.1.0`, 2026-11-06)
+
+- **Real macOS Agent & System Toolchain Discovery (`platform/mod.rs`, `discovery/mod.rs`, `discovery/system.rs`)**:
+  - Discovers OpenAI Codex bundled inside `/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex` (`codex-cli 0.167.0-alpha.3.2`) in addition to standard PATH/Homebrew/npm locations.
+  - Recognizes macOS `root:admin` (`uid=0, gid=80`, `0775`) framework binaries (`/Library/Frameworks/Python.framework/Versions/3.15/bin/python3.15`) as safe while still rejecting world-writable (`0o002`) targets.
+  - Reads Homebrew version (`7.0.12`) deterministically from `<prefix>/.git/refs/tags` when `brew` is a bash script.
+  - Traverses nested local skill layouts (`~/.claude/skills/synced/<bucket>/<skill>/SKILL.md` and `~/.codex/skills/.system/<skill>/SKILL.md`), discovering all 11 Claude Code skills and 5 Codex system skills on the live machine.
+- **Real Host Session & Token/Cost Telemetry (`sessions.rs`, `usage_insights.rs`)**:
+  - Parses real local session transcripts (`~/.claude/history.jsonl`, `~/.claude/projects/*/*.jsonl`, `~/.codex/session_index.jsonl`, `~/.codex/sessions/*/*/*/*.jsonl`) with message-ID deduplication, prompt-cache 10% rate weighting, and 2026 model pricing (`claude-opus-5-5`, `gpt-6.1-sol`, etc.).
+- **100% Real Host-Driven Governance Compliance & Enforcement (`governance.rs`, `actions.rs`, `workspaces.rs`)**:
+  - Evaluates the 5 governance compliance domains against the live discovered `AgentReport` fleet (`Claude Code 2.1.318`, `OpenAI Codex 0.167.0-alpha.3.2`, `OpenCode 2.2.5`), active host model/provider routes (`codex->gpt-6-sol`, `claude->opus`), discovered MCP/Skills (`1 MCP, 16 Skills`), and deterministic Ed25519/SHA-256 policy signatures.
+  - Enforces approved agent allowlists and `StrictLockdown` remote MCP restrictions inside `App::prepare` while guaranteeing `RestoreBackup`, `RecoverInstall`, and `Uninstall` are never deadlocked.
+  - Materializes `~/NexusWorkspaces/<slug>` and writes `AGENTS.md` on disk when provisioning from an Organization Workspace Template.
+- **Verification (2026-11-06, macOS arm64)**: `cargo test --locked` → **173 passed, 0 failed, 3 ignored** (`real_machine_discovery_smoke` also executed and verified against live host); `cargo clippy --locked --all-targets -- -D warnings` → 0 warnings; `pnpm typecheck` + `eslint` → 0 errors; `pnpm test` (Vitest) → 20 passed; `pnpm test:ui` (Playwright + `axe`) → 33 passed; `pnpm build` → pass.
+
 ## Continuation point
 
-Phase 10 Session Continuity and Contextual Usage Insights delivered in version 0.6.0. Next canonical roadmap phase is Phase 11 Accounts + cloud sync + Pro.
+Phases 0–13 and the `v1.1.0` Real-Time Host & Fleet Truth Engine are complete and verified.

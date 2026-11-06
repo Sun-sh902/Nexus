@@ -344,14 +344,44 @@ pub fn inspect_workspace(
 }
 
 /// Creates a new workspace record, enforcing path validation and home confinement.
+/// When provisioning from a verified organization template under `~/NexusWorkspaces/<slug>`,
+/// materializes the workspace directory and writes `AGENTS.md` if not yet present.
 pub fn create_workspace(
     ctx: &HostContext,
     store: &Store,
     req: CreateWorkspaceRequest,
     now: Instant,
 ) -> NexusResult<WorkspaceRecord> {
+    let trimmed = req.path.trim();
+    if let Some(slug) = trimmed.strip_prefix("~/NexusWorkspaces/") {
+        if !slug.is_empty() && !slug.contains("..") && !slug.contains('/') && !slug.contains('\\') {
+            let target_dir = ctx.home.join("NexusWorkspaces").join(slug);
+            let _ = std::fs::create_dir_all(&target_dir);
+            let agents_md = target_dir.join("AGENTS.md");
+            if !agents_md.exists() {
+                if let Ok(templates) = store.list_workspace_templates() {
+                    if let Some(tpl) = templates.iter().find(|t| {
+                        t.template_id.ends_with(slug)
+                            || req.name.as_deref() == Some(t.name.as_str())
+                    }) {
+                        let _ = std::fs::write(&agents_md, &tpl.instructions_scaffold);
+                    }
+                }
+            }
+        }
+    }
+
+    let is_template_provision = trimmed.starts_with("~/NexusWorkspaces/");
     let valid_path = validate_workspace_path(ctx, &req.path)?;
     let path_str = valid_path.to_string_lossy().to_string();
+
+    if is_template_provision {
+        if let Ok(existing) = store.workspaces() {
+            if let Some(found) = existing.into_iter().find(|w| w.path == path_str) {
+                return Ok(found);
+            }
+        }
+    }
 
     let name = req
         .name

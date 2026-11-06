@@ -91,6 +91,78 @@ const PRICING_TABLE: &[(&str, PricingEntry)] = &[
             display_name: "Gemini 1.5 Flash",
         },
     ),
+    (
+        "claude-opus",
+        PricingEntry {
+            input_cents_per_million: 1500,  // $15.00
+            output_cents_per_million: 7500, // $75.00
+            display_name: "Claude Opus",
+        },
+    ),
+    (
+        "claude-sonnet",
+        PricingEntry {
+            input_cents_per_million: 300,   // $3.00
+            output_cents_per_million: 1500, // $15.00
+            display_name: "Claude Sonnet",
+        },
+    ),
+    (
+        "opus",
+        PricingEntry {
+            input_cents_per_million: 1500,
+            output_cents_per_million: 7500,
+            display_name: "Claude Opus",
+        },
+    ),
+    (
+        "sonnet",
+        PricingEntry {
+            input_cents_per_million: 300,
+            output_cents_per_million: 1500,
+            display_name: "Claude Sonnet",
+        },
+    ),
+    (
+        "gpt-6",
+        PricingEntry {
+            input_cents_per_million: 250,
+            output_cents_per_million: 1000,
+            display_name: "GPT-6 Codex",
+        },
+    ),
+    (
+        "gpt-5",
+        PricingEntry {
+            input_cents_per_million: 200,
+            output_cents_per_million: 800,
+            display_name: "GPT-5",
+        },
+    ),
+    (
+        "o3",
+        PricingEntry {
+            input_cents_per_million: 1000,
+            output_cents_per_million: 4000,
+            display_name: "OpenAI o3",
+        },
+    ),
+    (
+        "gemini-2.5-pro",
+        PricingEntry {
+            input_cents_per_million: 125,
+            output_cents_per_million: 500,
+            display_name: "Gemini 2.5 Pro",
+        },
+    ),
+    (
+        "gemini-2.5-flash",
+        PricingEntry {
+            input_cents_per_million: 10,
+            output_cents_per_million: 40,
+            display_name: "Gemini 2.5 Flash",
+        },
+    ),
 ];
 
 /// Calculates estimated cost in cents based on known model rates.

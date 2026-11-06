@@ -1433,6 +1433,47 @@ fn real_machine_discovery_smoke() {
     }
     let json = serde_json::to_string(&o).unwrap();
     assert!(!json.contains("sk-"), "possible secret in overview");
+
+    // Verify real host session discovery & token/cost telemetry
+    let sessions = app.list_sessions(None, None, Some(20)).unwrap();
+    println!("real sessions discovered: {}", sessions.len());
+    for s in sessions.iter().take(6) {
+        println!(
+            "  session [{}] {:?} title={:?} msgs={} in={} out={} cost_cents={} model={:?}",
+            s.agent_id.as_str(),
+            s.external_session_id,
+            s.title,
+            s.message_count,
+            s.input_tokens,
+            s.output_tokens,
+            s.estimated_cost_cents,
+            s.model_identifier
+        );
+    }
+    let usage = app.usage_insights(None, None).unwrap();
+    println!(
+        "real usage insights: sessions={} tokens={} in_tokens={} out_tokens={} total_cost_usd={:.4}",
+        usage.total_sessions_count,
+        usage.total_tokens,
+        usage.total_input_tokens,
+        usage.total_output_tokens,
+        usage.total_estimated_cost_usd
+    );
+
+    // Verify real host-driven governance compliance
+    let gov = app.get_governance_state().unwrap();
+    println!(
+        "real governance compliance: score={}% status={:?} sig_verified={}",
+        gov.compliance.compliance_score,
+        gov.compliance.overall_status,
+        gov.policy.signature_verified
+    );
+    for chk in &gov.compliance.checks {
+        println!(
+            "  gov check [{}] {:?} subject={:?} reason={:?}",
+            chk.domain, chk.status, chk.subject, chk.reason
+        );
+    }
 }
 
 #[test]

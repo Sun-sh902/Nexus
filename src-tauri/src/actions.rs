@@ -449,6 +449,10 @@ impl App {
     }
 
     pub fn prepare(&self, request: ActionRequest) -> NexusResult<PlanView> {
+        {
+            let store = self.store()?;
+            crate::governance::enforce_policy_for_action(&store, &request)?;
+        }
         let plan = match request {
             ActionRequest::ApplyModel { agent_id } => self.prepare_model(agent_id)?,
             ActionRequest::SetMcpEnabled {

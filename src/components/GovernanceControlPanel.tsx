@@ -187,7 +187,7 @@ export function GovernanceControlPanel() {
       const slug = tpl.id.replace(/^tpl_/, '');
       await createWorkspace({
         name: tpl.name,
-        path: `~/Projects/${slug}`,
+        path: `~/NexusWorkspaces/${slug}`,
         primaryAgent: (tpl.primaryAgent as AgentId) || 'claude',
         fallbackAgent: (tpl.fallbackAgent as AgentId) || 'codex',
       });

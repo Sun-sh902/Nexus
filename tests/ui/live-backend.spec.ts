@@ -24,7 +24,7 @@ async function startLive(page: Page, locale: 'en-US', route: string, options: { 
       invoke: async (cmd: string, args: Record<string, unknown>) => {
         calls.push({ cmd, args });
         switch (cmd) {
-          case 'app_metadata': return { contractVersion: 1, version: '1.0.0', preferredLocale: locale };
+          case 'app_metadata': return { contractVersion: 1, version: '1.1.0', preferredLocale: locale };
           case 'apply_app_preferences': return { contractVersion: 1, requestId: (args.request as { requestId: string }).requestId, result: 'applied' };
           case 'nexus_set_locale': return null;
           case 'nexus_overview':

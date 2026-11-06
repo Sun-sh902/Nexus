@@ -1045,18 +1045,19 @@ impl App {
         agent_id: Option<AgentId>,
         limit: Option<usize>,
     ) -> NexusResult<Vec<crate::sessions::SessionSummary>> {
+        let now = Instant::now();
         let store = self.store()?;
+        let workspaces = store.workspaces().unwrap_or_default();
+        for discovered in crate::sessions::discover_host_agent_sessions(&self.ctx, &workspaces, now)
+        {
+            let _ = store.insert_or_update_session(&discovered);
+        }
         if let Some(ref wid) = workspace_id {
             if let Ok(Some(ws)) = store.get_workspace(wid) {
                 let p = std::path::PathBuf::from(&ws.path);
                 let primary = AgentId::parse(&ws.primary_agent).unwrap_or(AgentId::Claude);
-                let markers = crate::sessions::scan_project_session_markers(
-                    &self.ctx,
-                    &p,
-                    primary,
-                    wid,
-                    Instant::now(),
-                );
+                let markers =
+                    crate::sessions::scan_project_session_markers(&self.ctx, &p, primary, wid, now);
                 for m in markers {
                     let _ = store.insert_or_update_session(&m);
                 }
@@ -1136,9 +1137,14 @@ impl App {
         workspace_id: Option<String>,
         agent_id: Option<AgentId>,
     ) -> NexusResult<crate::usage_insights::UsageInsights> {
+        let now = Instant::now();
         let store = self.store()?;
-        let sessions = store.sessions(workspace_id.as_deref(), agent_id, 200)?;
         let workspaces = store.workspaces()?;
+        for discovered in crate::sessions::discover_host_agent_sessions(&self.ctx, &workspaces, now)
+        {
+            let _ = store.insert_or_update_session(&discovered);
+        }
+        let sessions = store.sessions(workspace_id.as_deref(), agent_id, 200)?;
         Ok(crate::usage_insights::compute_usage_insights(
             &sessions,
             &workspaces,
@@ -1259,24 +1265,27 @@ impl App {
     // ---- Team & Organization Control Plane (Phase 13) --------------------------------------
 
     pub fn get_governance_state(&self) -> NexusResult<crate::governance::GovernanceStateView> {
+        let agents = self.overview(false).map(|o| o.agents).unwrap_or_default();
         let store = self.store()?;
-        crate::governance::get_governance_state(&store)
+        crate::governance::get_governance_state_with_agents(&store, &agents)
     }
 
     pub fn switch_org_role(
         &self,
         new_role: &str,
     ) -> NexusResult<crate::governance::GovernanceStateView> {
+        let agents = self.overview(false).map(|o| o.agents).unwrap_or_default();
         let store = self.store()?;
-        crate::governance::switch_org_role(&store, new_role)
+        crate::governance::switch_org_role_with_agents(&store, new_role, &agents)
     }
 
     pub fn update_org_policy(
         &self,
         request: crate::governance::UpdateOrgPolicyRequest,
     ) -> NexusResult<crate::governance::GovernanceStateView> {
+        let agents = self.overview(false).map(|o| o.agents).unwrap_or_default();
         let store = self.store()?;
-        crate::governance::update_org_policy(&store, request)
+        crate::governance::update_org_policy_with_agents(&store, request, &agents)
     }
 
     pub fn trigger_emergency_break_glass(
@@ -1284,11 +1293,13 @@ impl App {
         enabled: bool,
         reason: Option<String>,
     ) -> NexusResult<crate::governance::GovernanceStateView> {
+        let agents = self.overview(false).map(|o| o.agents).unwrap_or_default();
         let store = self.store()?;
-        crate::governance::trigger_emergency_break_glass(
+        crate::governance::trigger_emergency_break_glass_with_agents(
             &store,
             enabled,
             reason.as_deref().unwrap_or(""),
+            &agents,
         )
     }
 }

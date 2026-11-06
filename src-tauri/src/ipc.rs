@@ -584,38 +584,47 @@ pub fn nexus_refresh_registry_index(
 }
 
 #[tauri::command]
-pub fn nexus_get_governance_state(
+pub async fn nexus_get_governance_state(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
 ) -> NexusResult<crate::governance::GovernanceStateView> {
     main_window(&window)?;
-    state.get_governance_state()
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.get_governance_state())
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
 }
 
 #[tauri::command]
-pub fn nexus_switch_org_role(
+pub async fn nexus_switch_org_role(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
     new_role: String,
 ) -> NexusResult<crate::governance::GovernanceStateView> {
     main_window(&window)?;
     bounded(&new_role, 32)?;
-    state.switch_org_role(&new_role)
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.switch_org_role(&new_role))
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
 }
 
 #[tauri::command]
-pub fn nexus_update_org_policy(
+pub async fn nexus_update_org_policy(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
     request: crate::governance::UpdateOrgPolicyRequest,
 ) -> NexusResult<crate::governance::GovernanceStateView> {
     main_window(&window)?;
     bounded(&request.enforcement_mode, 32)?;
-    state.update_org_policy(request)
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.update_org_policy(request))
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
 }
 
 #[tauri::command]
-pub fn nexus_trigger_emergency_break_glass(
+pub async fn nexus_trigger_emergency_break_glass(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
     enabled: bool,
@@ -625,7 +634,10 @@ pub fn nexus_trigger_emergency_break_glass(
     if let Some(ref r) = reason {
         bounded(r, 256)?;
     }
-    state.trigger_emergency_break_glass(enabled, reason)
+    let app = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || app.trigger_emergency_break_glass(enabled, reason))
+        .await
+        .map_err(|_| NexusError::new("app.task_failed"))?
 }
 
 #[cfg(test)]
